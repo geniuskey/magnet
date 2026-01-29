@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_API_URL=${LLM_API_URL:-https://api.anthropic.com/v1}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-20250514}
+      - ORG_API_URL=${ORG_API_URL:-https://intranet.company.com/api/org}
+      - CALENDAR_API_URL=${CALENDAR_API_URL:-https://intranet.company.com/api/calendar}
+      - ROOM_API_URL=${ROOM_API_URL:-https://intranet.company.com/api/rooms}
+      - REDIS_URL=redis://redis:6379
+      - USE_MOCK_API=true
+      - LOG_LEVEL=DEBUG
+      - AUTH_BYPASS=true
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
