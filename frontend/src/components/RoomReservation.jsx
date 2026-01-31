@@ -43,7 +43,15 @@ export default function RoomReservation() {
   // 컨텍스트 메뉴 상태
   const [contextMenu, setContextMenu] = useState(null); // { x, y, roomId, slotIndex, slot, status, room, reservation }
 
+  // 리사이즈 드래그 상태
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeEdge, setResizeEdge] = useState(null); // 'start' | 'end'
+
+  // 미니맵 상태
+  const [viewportPosition, setViewportPosition] = useState({ left: 0, width: 100 });
+
   const scrollContainerRef = useRef(null);
+  const minimapRef = useRef(null);
 
   // 선택된 참석자들의 바쁜 시간대 계산
   const participantBusySlots = useMemo(() => {
@@ -339,6 +347,111 @@ export default function RoomReservation() {
     }
   }, [isDragging, handleMouseUp]);
 
+  // 스크롤 위치 추적 (미니맵용)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const updateViewport = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = container;
+      const totalWidth = scrollWidth - 128; // 회의실 이름 열 제외
+      const visibleWidth = clientWidth - 128;
+
+      if (totalWidth > 0) {
+        const left = (scrollLeft / totalWidth) * 100;
+        const width = (visibleWidth / totalWidth) * 100;
+        setViewportPosition({ left: Math.max(0, left), width: Math.min(100, width) });
+      }
+    };
+
+    updateViewport();
+    container.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      container.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, [rooms, selectedFloor]);
+
+  // 미니맵 클릭으로 스크롤
+  const handleMinimapClick = (e) => {
+    const minimap = minimapRef.current;
+    const container = scrollContainerRef.current;
+    if (!minimap || !container) return;
+
+    const rect = minimap.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickPercent = clickX / rect.width;
+
+    const totalScrollWidth = container.scrollWidth - 128;
+    const targetScroll = clickPercent * totalScrollWidth - (container.clientWidth - 128) / 2;
+
+    container.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' });
+  };
+
+  // 선택 영역의 시작/끝 슬롯 인덱스
+  const selectedSlotRange = useMemo(() => {
+    if (selectedTimeSlots.length === 0 || !selectedRoom) return null;
+
+    const indices = selectedTimeSlots
+      .filter(s => s.roomId === selectedRoom)
+      .map(s => timeSlots.indexOf(s.timeSlot))
+      .filter(i => i >= 0)
+      .sort((a, b) => a - b);
+
+    if (indices.length === 0) return null;
+    return { start: indices[0], end: indices[indices.length - 1] };
+  }, [selectedTimeSlots, selectedRoom, timeSlots]);
+
+  // 리사이즈 시작
+  const handleResizeStart = (edge, e) => {
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeEdge(edge);
+  };
+
+  // 리사이즈 중 마우스 이동
+  const handleResizeMove = useCallback((roomId, slotIndex) => {
+    if (!isResizing || !selectedSlotRange || roomId !== selectedRoom) return;
+
+    const { start, end } = selectedSlotRange;
+    let newStart = start;
+    let newEnd = end;
+
+    if (resizeEdge === 'start') {
+      newStart = Math.min(slotIndex, end);
+    } else if (resizeEdge === 'end') {
+      newEnd = Math.max(slotIndex, start);
+    }
+
+    if (newStart !== start || newEnd !== end) {
+      selectTimeRange(roomId, timeSlots[newStart], timeSlots[newEnd]);
+    }
+  }, [isResizing, selectedSlotRange, selectedRoom, resizeEdge, timeSlots, selectTimeRange]);
+
+  // 리사이즈 종료
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+    setResizeEdge(null);
+  }, []);
+
+  // 리사이즈 전역 마우스 업
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mouseup', handleResizeEnd);
+      return () => window.removeEventListener('mouseup', handleResizeEnd);
+    }
+  }, [isResizing, handleResizeEnd]);
+
+  // 슬롯이 선택 영역의 가장자리인지 확인
+  const getSlotEdge = (roomId, slotIndex) => {
+    if (!selectedSlotRange || roomId !== selectedRoom) return null;
+    if (slotIndex === selectedSlotRange.start) return 'start';
+    if (slotIndex === selectedSlotRange.end) return 'end';
+    return null;
+  };
+
   // 시간 헤더용 - 정각만 표시
   const hourSlots = timeSlots.filter(slot => slot.endsWith(':00'));
 
@@ -555,12 +668,24 @@ export default function RoomReservation() {
                         const isHour = isHourStart(slot);
                         const inDragRange = isInDragRange(room.id, slotIndex);
                         const isBusy = showAvailability && isParticipantBusy(slot);
+                        const edge = getSlotEdge(room.id, slotIndex);
 
                         return (
                           <div
                             key={slot}
-                            onMouseDown={() => handleMouseDown(room.id, slotIndex, room)}
-                            onMouseEnter={() => handleMouseEnter(room.id, slotIndex)}
+                            onMouseDown={(e) => {
+                              // 리사이즈 핸들 클릭이 아닌 경우에만 일반 드래그 시작
+                              if (!e.target.classList.contains('resize-handle')) {
+                                handleMouseDown(room.id, slotIndex, room);
+                              }
+                            }}
+                            onMouseEnter={() => {
+                              if (isResizing) {
+                                handleResizeMove(room.id, slotIndex);
+                              } else {
+                                handleMouseEnter(room.id, slotIndex);
+                              }
+                            }}
                             onContextMenu={(e) => handleContextMenu(e, room.id, slotIndex, room)}
                             className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative ${
                               isHour ? 'border-l border-gray-200' : 'border-l border-gray-100'
@@ -583,12 +708,108 @@ export default function RoomReservation() {
                                 backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(251, 146, 60, 0.3) 2px, rgba(251, 146, 60, 0.3) 4px)'
                               }} />
                             )}
+                            {/* 리사이즈 핸들 - 선택 영역 가장자리 */}
+                            {status === 'selected' && edge === 'start' && (
+                              <div
+                                className="resize-handle absolute left-0 top-0 bottom-0 w-1.5 bg-blue-700 cursor-ew-resize hover:bg-blue-800 z-10"
+                                onMouseDown={(e) => handleResizeStart('start', e)}
+                              />
+                            )}
+                            {status === 'selected' && edge === 'end' && (
+                              <div
+                                className="resize-handle absolute right-0 top-0 bottom-0 w-1.5 bg-blue-700 cursor-ew-resize hover:bg-blue-800 z-10"
+                                onMouseDown={(e) => handleResizeStart('end', e)}
+                              />
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* 미니맵 */}
+            <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 bg-gray-100">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500 w-16">미니맵</span>
+                <div
+                  ref={minimapRef}
+                  onClick={handleMinimapClick}
+                  className="flex-1 h-6 bg-white rounded border border-gray-300 relative cursor-pointer overflow-hidden"
+                >
+                  {/* 시간 눈금 */}
+                  {hourSlots.map((hour, idx) => (
+                    <div
+                      key={hour}
+                      className="absolute top-0 bottom-0 border-l border-gray-200"
+                      style={{ left: `${(idx / hourSlots.length) * 100}%` }}
+                    >
+                      {idx % 2 === 0 && (
+                        <span className="absolute -top-0.5 left-0.5 text-[8px] text-gray-400">{hour.split(':')[0]}</span>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* 모든 회의실의 예약 표시 */}
+                  {rooms.map((room, roomIdx) => (
+                    <div key={room.id} className="absolute inset-0">
+                      {Object.entries(reservations[room.id] || {}).map(([slot, res]) => {
+                        const slotIdx = timeSlots.indexOf(slot);
+                        if (slotIdx < 0) return null;
+                        // 예약의 첫 슬롯만 표시
+                        const prevSlot = timeSlots[slotIdx - 1];
+                        if (prevSlot && reservations[room.id]?.[prevSlot]?.id === res.id) return null;
+
+                        // 예약 길이 계산
+                        let endIdx = slotIdx;
+                        while (endIdx < timeSlots.length - 1 && reservations[room.id]?.[timeSlots[endIdx + 1]]?.id === res.id) {
+                          endIdx++;
+                        }
+                        const startPercent = (slotIdx / timeSlots.length) * 100;
+                        const widthPercent = ((endIdx - slotIdx + 1) / timeSlots.length) * 100;
+                        const topPercent = (roomIdx / rooms.length) * 100;
+                        const heightPercent = 100 / rooms.length;
+
+                        return (
+                          <div
+                            key={`${room.id}-${slot}`}
+                            className="absolute bg-red-300 opacity-70"
+                            style={{
+                              left: `${startPercent}%`,
+                              width: `${widthPercent}%`,
+                              top: `${topPercent}%`,
+                              height: `${heightPercent}%`,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+
+                  {/* 현재 선택 영역 */}
+                  {selectedSlotRange && selectedRoom && (
+                    <div
+                      className="absolute bg-blue-500 opacity-80"
+                      style={{
+                        left: `${(selectedSlotRange.start / timeSlots.length) * 100}%`,
+                        width: `${((selectedSlotRange.end - selectedSlotRange.start + 1) / timeSlots.length) * 100}%`,
+                        top: `${(rooms.findIndex(r => r.id === selectedRoom) / rooms.length) * 100}%`,
+                        height: `${100 / rooms.length}%`,
+                      }}
+                    />
+                  )}
+
+                  {/* 뷰포트 인디케이터 */}
+                  <div
+                    className="absolute top-0 bottom-0 border-2 border-blue-600 bg-blue-100 bg-opacity-30 rounded-sm pointer-events-none"
+                    style={{
+                      left: `${viewportPosition.left}%`,
+                      width: `${viewportPosition.width}%`,
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -619,7 +840,7 @@ export default function RoomReservation() {
                 )}
               </div>
               <div className="text-xs text-gray-500 flex items-center gap-2">
-                <span>드래그: 연속 선택 · 우클릭: 메뉴</span>
+                <span>드래그: 연속 선택 · 가장자리 드래그: 시간 조절 · 우클릭: 메뉴</span>
                 <button
                   onClick={() => setShowShortcutHelp(true)}
                   className="px-1.5 py-0.5 bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-mono transition-colors"
