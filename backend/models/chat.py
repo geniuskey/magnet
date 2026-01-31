@@ -32,12 +32,20 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="대화 ID (새 대화면 생략)")
 
 
+class UIAction(BaseModel):
+    """UI 제어 액션"""
+
+    action: str = Field(..., description="액션 타입 (setBuilding, setFloor, setRoom, setParticipants, setDate, setTime)")
+    params: dict[str, Any] = Field(..., description="액션 파라미터")
+
+
 class ResponseContent(BaseModel):
     """응답 내용"""
 
     type: ResponseType = Field(..., description="응답 타입")
     content: str = Field(..., description="응답 텍스트")
     options: Optional[list[dict[str, Any]]] = Field(None, description="선택 옵션 목록")
+    actions: Optional[list[UIAction]] = Field(None, description="UI 제어 액션 목록")
 
 
 class ChatResponse(BaseModel):

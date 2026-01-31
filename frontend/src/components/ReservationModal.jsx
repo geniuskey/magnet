@@ -7,11 +7,23 @@ export default function ReservationModal({ onClose }) {
     selectedRoom,
     selectedTimeSlots,
     selectedParticipants,
+    selectedEntities,
+    selectionTypes,
+    organizer,
+    requiredAttendees,
+    optionalAttendees,
+    attendeeTypes,
     selectedDate,
     meetingTitle,
     setMeetingTitle,
+    recurrence,
+    setRecurrence,
+    recurrenceEndDate,
+    setRecurrenceEndDate,
+    recurrenceTypes,
     createReservation,
     clearSelection,
+    clearAttendees,
   } = useReservation();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,7 +36,7 @@ export default function ReservationModal({ onClose }) {
 
   const startTime = sortedSlots[0]?.timeSlot || '';
   const endTime = sortedSlots.length > 0 ? addMinutes(sortedSlots[sortedSlots.length - 1].timeSlot, 10) : '';
-  const duration = sortedSlots.length * 10; // 분 단위
+  const duration = sortedSlots.length * 10;
 
   function addMinutes(time, minutes) {
     const [h, m] = time.split(':').map(Number);
@@ -34,11 +46,24 @@ export default function ReservationModal({ onClose }) {
     return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
   }
 
+  const recurrenceLabels = {
+    [recurrenceTypes.NONE]: '반복 안함',
+    [recurrenceTypes.DAILY]: '매일',
+    [recurrenceTypes.WEEKLY]: '매주',
+    [recurrenceTypes.BIWEEKLY]: '격주',
+    [recurrenceTypes.MONTHLY]: '매월',
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!meetingTitle.trim()) {
       setError('회의 제목을 입력해주세요.');
+      return;
+    }
+
+    if (recurrence !== recurrenceTypes.NONE && !recurrenceEndDate) {
+      setError('반복 종료 날짜를 선택해주세요.');
       return;
     }
 
@@ -61,6 +86,9 @@ export default function ReservationModal({ onClose }) {
 
   const handleCancel = () => {
     clearSelection();
+    clearAttendees();
+    setRecurrence(recurrenceTypes.NONE);
+    setRecurrenceEndDate('');
     onClose();
   };
 
@@ -70,17 +98,15 @@ export default function ReservationModal({ onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-md w-full"
+        className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">회의실 예약</h2>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
-            {/* 에러 메시지 */}
             {error && (
               <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
                 {error}
@@ -134,27 +160,85 @@ export default function ReservationModal({ onClose }) {
               />
             </div>
 
-            {/* 참여자 */}
-            {selectedParticipants.length > 0 && (
+            {/* 반복 설정 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                반복
+              </label>
+              <select
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {Object.entries(recurrenceLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 반복 종료 날짜 */}
+            {recurrence !== recurrenceTypes.NONE && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  참여자 ({selectedParticipants.length}명)
+                  반복 종료 날짜 <span className="text-red-500">*</span>
                 </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedParticipants.map(p => (
-                    <span
-                      key={p.id}
-                      className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-800 text-sm rounded-full"
-                    >
-                      {p.name}
-                    </span>
-                  ))}
+                <input
+                  type="date"
+                  value={recurrenceEndDate}
+                  onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  min={selectedDate}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {recurrence === recurrenceTypes.DAILY && '매일 반복됩니다.'}
+                  {recurrence === recurrenceTypes.WEEKLY && '매주 같은 요일에 반복됩니다.'}
+                  {recurrence === recurrenceTypes.BIWEEKLY && '격주 같은 요일에 반복됩니다.'}
+                  {recurrence === recurrenceTypes.MONTHLY && '매월 같은 날짜에 반복됩니다.'}
+                </p>
+              </div>
+            )}
+
+            {/* 참석자 (Entity 기반으로 표시) */}
+            {selectedEntities.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  참석자 ({selectedParticipants.length}명)
+                </label>
+                <div className="space-y-2">
+                  {/* 주관자 */}
+                  {selectedEntities.filter(e => e.attendeeType === attendeeTypes.ORGANIZER).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-xs text-purple-600 font-medium mr-1">주관:</span>
+                      {selectedEntities.filter(e => e.attendeeType === attendeeTypes.ORGANIZER).map(entity => (
+                        <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="purple" />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 필수 참석자 */}
+                  {selectedEntities.filter(e => e.attendeeType === attendeeTypes.REQUIRED).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-xs text-blue-600 font-medium mr-1">필수:</span>
+                      {selectedEntities.filter(e => e.attendeeType === attendeeTypes.REQUIRED).map(entity => (
+                        <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="blue" />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 선택 참석자 */}
+                  {selectedEntities.filter(e => e.attendeeType === attendeeTypes.OPTIONAL).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-xs text-gray-500 font-medium mr-1">선택:</span>
+                      {selectedEntities.filter(e => e.attendeeType === attendeeTypes.OPTIONAL).map(entity => (
+                        <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="gray" />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* 푸터 */}
           <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
             <button
               type="button"
@@ -175,5 +259,40 @@ export default function ReservationModal({ onClose }) {
         </form>
       </div>
     </div>
+  );
+}
+
+// Entity Chip 컴포넌트 (TEAM 또는 INDIVIDUAL만 사용)
+function EntityChip({ entity, selectionTypes, color }) {
+  const getIcon = () => {
+    if (entity.type === selectionTypes.TEAM) {
+      return (
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      );
+    }
+    // INDIVIDUAL (개인)
+    return (
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    );
+  };
+
+  const colorClasses = {
+    purple: 'bg-purple-100 text-purple-700',
+    blue: 'bg-blue-100 text-blue-700',
+    gray: 'bg-gray-100 text-gray-600',
+  };
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${colorClasses[color]}`}>
+      {getIcon()}
+      <span>{entity.name}</span>
+      {entity.memberCount > 1 && (
+        <span className="text-[10px] opacity-70">({entity.memberCount})</span>
+      )}
+    </span>
   );
 }

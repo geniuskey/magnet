@@ -1,9 +1,77 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useReservation } from '../context/ReservationContext';
 import TypingIndicator from './TypingIndicator';
 
 const STORAGE_KEY = 'floating_chat_position';
+
+// 엔티티 매칭 유틸
+const extractActions = (text, { buildings, employees, allRooms }) => {
+  const actions = [];
+
+  // 건물 매칭
+  buildings.forEach(building => {
+    if (text.includes(building.name)) {
+      actions.push({
+        type: 'building',
+        label: `건물: ${building.name}`,
+        data: building,
+      });
+    }
+  });
+
+  // 층 매칭
+  const floorMatch = text.match(/(\d)층/g);
+  if (floorMatch) {
+    floorMatch.forEach(f => {
+      actions.push({
+        type: 'floor',
+        label: `층: ${f}`,
+        data: f,
+      });
+    });
+  }
+
+  // 회의실 매칭
+  allRooms.forEach(room => {
+    if (text.includes(room.name)) {
+      actions.push({
+        type: 'room',
+        label: `회의실: ${room.name}`,
+        data: room,
+      });
+    }
+  });
+
+  // 직원 매칭
+  employees.forEach(emp => {
+    if (text.includes(emp.name)) {
+      actions.push({
+        type: 'participant',
+        label: `참여자: ${emp.name}`,
+        data: emp,
+      });
+    }
+  });
+
+  // 시간 매칭 (예: 14:00 ~ 15:00, 오후 2시)
+  const timeRangeMatch = text.match(/(\d{1,2}):?(\d{2})?\s*[~\-부터]\s*(\d{1,2}):?(\d{2})?/);
+  if (timeRangeMatch) {
+    const startHour = parseInt(timeRangeMatch[1]);
+    const startMin = timeRangeMatch[2] ? parseInt(timeRangeMatch[2]) : 0;
+    const endHour = parseInt(timeRangeMatch[3]);
+    const endMin = timeRangeMatch[4] ? parseInt(timeRangeMatch[4]) : 0;
+    const startTime = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+    const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+    actions.push({
+      type: 'time',
+      label: `시간: ${startTime} ~ ${endTime}`,
+      data: { startTime, endTime },
+    });
+  }
+
+  return actions;
+};
 
 // localStorage에서 위치 불러오기
 const loadPosition = () => {
@@ -41,6 +109,75 @@ export default function FloatingChat() {
 
   const { messages, isLoading, sendMessage, clearMessages } = useChat();
   const reservation = useReservation();
+  const [appliedActions, setAppliedActions] = useState(new Set());
+
+  // 액션 추출 헬퍼 데이터
+  const entityData = useMemo(() => ({
+    buildings: reservation.buildings,
+    employees: reservation.employees,
+    allRooms: reservation.allRooms,
+  }), [reservation.buildings, reservation.employees, reservation.allRooms]);
+
+  // 액션 적용 핸들러
+  const handleApplyAction = useCallback((action, msgIdx) => {
+    const key = `${msgIdx}_${action.type}_${action.label}`;
+    if (appliedActions.has(key)) return;
+
+    switch (action.type) {
+      case 'building':
+        reservation.setBuildingByName(action.data.name);
+        break;
+      case 'floor':
+        const floorNum = action.data.replace('층', '');
+        reservation.setFloorByName(`${floorNum}층`);
+        break;
+      case 'room':
+        reservation.setRoomByName(action.data.name);
+        break;
+      case 'participant':
+        reservation.toggleParticipant(action.data);
+        break;
+      case 'time':
+        if (reservation.selectedRoom) {
+          reservation.setTimeByRange(action.data.startTime, action.data.endTime);
+        }
+        break;
+    }
+
+    setAppliedActions(prev => new Set([...prev, key]));
+  }, [reservation, appliedActions]);
+
+  // 최적 시간 찾기
+  const handleFindOptimalTimes = useCallback(() => {
+    const participantIds = reservation.selectedParticipants.map(p => p.id);
+    const optimalTimes = reservation.findOptimalTimes(participantIds, reservation.selectedDate, 60);
+
+    if (optimalTimes.length === 0) {
+      const noTimeMsg = {
+        role: 'assistant',
+        content: `선택된 참여자들(${reservation.selectedParticipants.map(p => p.name).join(', ')})의 일정을 분석한 결과, ${reservation.selectedDate}에 공통으로 가능한 1시간 연속 시간대를 찾지 못했습니다.\n\n다른 날짜를 선택하거나 회의 시간을 줄여보세요.`,
+        timestamp: new Date().toISOString(),
+      };
+      // 직접 메시지 추가 (sendMessage 대신 로컬로 처리)
+      setLocalMessages(prev => [...prev, noTimeMsg]);
+    } else {
+      const timeList = optimalTimes
+        .map((t, i) => `${i + 1}. ${t.startTime} ~ ${t.endTime}`)
+        .join('\n');
+
+      const optimalMsg = {
+        role: 'assistant',
+        content: `선택된 참여자들(${reservation.selectedParticipants.map(p => p.name).join(', ')})의 ${reservation.selectedDate} 일정을 분석한 결과, 다음 시간대가 최적입니다:\n\n${timeList}\n\n원하시는 시간대를 선택해주세요.`,
+        timestamp: new Date().toISOString(),
+        optimalTimes: optimalTimes,
+      };
+      setLocalMessages(prev => [...prev, optimalMsg]);
+    }
+  }, [reservation]);
+
+  // 로컬 메시지 (최적 시간 추천 결과 등)
+  const [localMessages, setLocalMessages] = useState([]);
+  const allMessages = useMemo(() => [...messages, ...localMessages], [messages, localMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -117,14 +254,40 @@ export default function FloatingChat() {
     const message = inputValue.trim();
     setInputValue('');
 
-    const context = {
-      selectedParticipants: reservation.selectedParticipants.map(p => p.name),
-      selectedBuilding: reservation.selectedBuilding?.name,
-      selectedFloor: reservation.selectedFloor?.name,
-      selectedDate: reservation.selectedDate,
-    };
+    // 컨텍스트 정보 구성 (현재 UI 상태)
+    const contextInfo = [];
+    if (reservation.selectedParticipants.length > 0) {
+      contextInfo.push(`참여자: ${reservation.selectedParticipants.map(p => p.name).join(', ')}`);
+    }
+    if (reservation.selectedBuilding) {
+      contextInfo.push(`건물: ${reservation.selectedBuilding.name}`);
+    }
+    if (reservation.selectedFloor) {
+      contextInfo.push(`층: ${reservation.selectedFloor.name}`);
+    }
+    if (reservation.selectedRoom) {
+      const room = reservation.allRooms.find(r => r.id === reservation.selectedRoom);
+      if (room) contextInfo.push(`회의실: ${room.name}`);
+    }
+    if (reservation.selectedTimeSlots.length > 0) {
+      const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
+      contextInfo.push(`선택 시간: ${slots[0]} ~ ${addMinutes(slots[slots.length - 1], 10)}`);
+    }
 
-    await sendMessage(message, context);
+    const fullMessage = contextInfo.length > 0
+      ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
+      : message;
+
+    await sendMessage(fullMessage);
+  };
+
+  // 시간 더하기 헬퍼
+  const addMinutes = (time, minutes) => {
+    const [h, m] = time.split(':').map(Number);
+    const totalMinutes = h * 60 + m + minutes;
+    const newH = Math.floor(totalMinutes / 60) % 24;
+    const newM = totalMinutes % 60;
+    return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
   };
 
   const handleKeyDown = (e) => {
@@ -179,9 +342,9 @@ export default function FloatingChat() {
         <span className="absolute right-full mr-3 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
           AI 어시스턴트
         </span>
-        {messages.length > 0 && (
+        {allMessages.length > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-            {messages.length}
+            {allMessages.length}
           </span>
         )}
       </button>
@@ -248,7 +411,7 @@ export default function FloatingChat() {
             </button>
           )}
           <button
-            onClick={clearMessages}
+            onClick={() => { clearMessages(); setLocalMessages([]); setAppliedActions(new Set()); }}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
             title="대화 초기화"
           >
@@ -279,7 +442,7 @@ export default function FloatingChat() {
 
       {/* 메시지 영역 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-        {messages.length === 0 ? (
+        {allMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -287,28 +450,91 @@ export default function FloatingChat() {
               </svg>
             </div>
             <p className="text-gray-600 font-medium mb-2">무엇을 도와드릴까요?</p>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-400 text-sm mb-4">
               예: "김철수, 이영희와 내일 오후 2시에 본관 2층 대회의실 예약해줘"
             </p>
+            {reservation.selectedParticipants.length > 0 && (
+              <button
+                onClick={handleFindOptimalTimes}
+                className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg hover:bg-green-200 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                선택된 참여자들의 최적 시간 찾기
+              </button>
+            )}
           </div>
         ) : (
           <>
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+            {allMessages.map((msg, idx) => {
+              const actions = msg.role === 'assistant' ? extractActions(msg.content, entityData) : [];
+              return (
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-md'
-                      : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'
-                  }`}
+                  key={idx}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white rounded-br-md'
+                        : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {/* 최적 시간 선택 버튼 */}
+                    {msg.optimalTimes && msg.optimalTimes.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1.5">시간 선택:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {msg.optimalTimes.map((time, timeIdx) => (
+                            <button
+                              key={timeIdx}
+                              onClick={() => {
+                                if (reservation.selectedRoom) {
+                                  reservation.setTimeByRange(time.startTime, time.endTime);
+                                } else {
+                                  alert('먼저 회의실을 선택해주세요.');
+                                }
+                              }}
+                              className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-colors"
+                            >
+                              {time.startTime} ~ {time.endTime}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* 빠른 적용 버튼 */}
+                    {actions.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1.5">빠른 적용:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {actions.map((action, actionIdx) => {
+                            const key = `${idx}_${action.type}_${action.label}`;
+                            const isApplied = appliedActions.has(key);
+                            return (
+                              <button
+                                key={actionIdx}
+                                onClick={() => handleApplyAction(action, idx)}
+                                disabled={isApplied}
+                                className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                                  isApplied
+                                    ? 'bg-green-100 text-green-700 cursor-default'
+                                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                }`}
+                              >
+                                {isApplied ? '✓ ' : ''}{action.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-gray-100">

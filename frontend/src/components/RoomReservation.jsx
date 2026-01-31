@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useReservation } from '../context/ReservationContext';
 import ReservationModal from './ReservationModal';
 import ReservationDetailModal from './ReservationDetailModal';
+import MyReservations from './MyReservations';
 
 export default function RoomReservation() {
   const {
@@ -10,28 +11,74 @@ export default function RoomReservation() {
     rooms,
     timeSlots,
     reservations,
+    myReservations,
     selectedBuilding,
     selectedFloor,
     selectedDate,
     selectedTimeSlots,
     selectedRoom,
+    selectedParticipants,
+    employeeSchedules,
     selectBuilding,
     selectFloor,
     setSelectedDate,
     selectTimeRange,
     clearSelection,
+    findOptimalTimes,
   } = useReservation();
 
   const [showModal, setShowModal] = useState(false);
+  const [showMyReservations, setShowMyReservations] = useState(false);
   const [viewingReservation, setViewingReservation] = useState(null);
   const [viewingRoom, setViewingRoom] = useState(null);
+  const [showAvailability, setShowAvailability] = useState(true); // 참석자 가용시간 표시 여부
+  const [meetingDuration, setMeetingDuration] = useState(60); // 회의 시간 (분)
 
   // 드래그 상태
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null); // { roomId, slotIndex }
   const [dragEnd, setDragEnd] = useState(null);
 
+  // 컨텍스트 메뉴 상태
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, roomId, slotIndex, slot, status, room, reservation }
+
   const scrollContainerRef = useRef(null);
+
+  // 선택된 참석자들의 바쁜 시간대 계산
+  const participantBusySlots = useMemo(() => {
+    if (!showAvailability || selectedParticipants.length === 0) return new Set();
+
+    const busySlots = new Set();
+    selectedParticipants.forEach(participant => {
+      const schedule = employeeSchedules[participant.id] || [];
+      schedule
+        .filter(s => s.date === selectedDate)
+        .forEach(s => {
+          // 시작/종료 시간을 10분 단위 슬롯으로 변환
+          const startMin = timeToMinutes(s.startTime);
+          const endMin = timeToMinutes(s.endTime);
+          for (let t = startMin; t < endMin; t += 10) {
+            const h = Math.floor(t / 60);
+            const m = t % 60;
+            busySlots.add(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+          }
+        });
+    });
+    return busySlots;
+  }, [showAvailability, selectedParticipants, employeeSchedules, selectedDate]);
+
+  // 최적 시간 추천
+  const optimalTimes = useMemo(() => {
+    if (selectedParticipants.length === 0) return [];
+    const participantIds = selectedParticipants.map(p => p.id);
+    return findOptimalTimes(participantIds, selectedDate, meetingDuration);
+  }, [selectedParticipants, selectedDate, meetingDuration, findOptimalTimes]);
+
+  // 시간 -> 분 변환 헬퍼
+  function timeToMinutes(time) {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  }
 
   const getSlotStatus = (roomId, timeSlot) => {
     if (reservations[roomId]?.[timeSlot]) {
@@ -42,6 +89,73 @@ export default function RoomReservation() {
     }
     return 'available';
   };
+
+  // 참석자 바쁜 시간대 여부 확인
+  const isParticipantBusy = (timeSlot) => {
+    return participantBusySlots.has(timeSlot);
+  };
+
+  // 추천 시간 적용
+  const applyOptimalTime = (startTime, endTime, roomId) => {
+    if (!roomId && rooms.length > 0) {
+      roomId = rooms[0].id;
+    }
+    if (roomId) {
+      selectTimeRange(roomId, startTime, endTime);
+    }
+  };
+
+  // 컨텍스트 메뉴 열기
+  const handleContextMenu = (e, roomId, slotIndex, room) => {
+    e.preventDefault();
+    const slot = timeSlots[slotIndex];
+    const status = getSlotStatus(roomId, slot);
+    const reservation = reservations[roomId]?.[slot];
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      roomId,
+      slotIndex,
+      slot,
+      status,
+      room,
+      reservation,
+    });
+  };
+
+  // 컨텍스트 메뉴 닫기
+  const closeContextMenu = () => setContextMenu(null);
+
+  // 컨텍스트 메뉴 - 시간 선택 (duration: 분)
+  const handleSelectDuration = (duration) => {
+    if (!contextMenu) return;
+    const { roomId, slotIndex } = contextMenu;
+    const slotsNeeded = Math.ceil(duration / 10);
+    const endIdx = Math.min(slotIndex + slotsNeeded - 1, timeSlots.length - 1);
+    selectTimeRange(roomId, timeSlots[slotIndex], timeSlots[endIdx]);
+    closeContextMenu();
+  };
+
+  // 컨텍스트 메뉴 - 정시까지 선택
+  const handleSelectToNextHour = () => {
+    if (!contextMenu) return;
+    const { roomId, slotIndex, slot } = contextMenu;
+    const currentMin = parseInt(slot.split(':')[1]);
+    const slotsToHour = currentMin === 0 ? 6 : Math.ceil((60 - currentMin) / 10);
+    const endIdx = Math.min(slotIndex + slotsToHour - 1, timeSlots.length - 1);
+    selectTimeRange(roomId, timeSlots[slotIndex], timeSlots[endIdx]);
+    closeContextMenu();
+  };
+
+  // 전역 클릭으로 컨텍스트 메뉴 닫기
+  useEffect(() => {
+    if (contextMenu) {
+      const handleClick = () => closeContextMenu();
+      window.addEventListener('click', handleClick);
+      return () => window.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu]);
 
   // 드래그 범위 내 슬롯인지 확인
   const isInDragRange = (roomId, slotIndex) => {
@@ -124,6 +238,20 @@ export default function RoomReservation() {
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">회의실 예약</h1>
+          <button
+            onClick={() => setShowMyReservations(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            내 예약
+            {myReservations.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                {myReservations.length}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="flex items-center gap-4 mt-4">
@@ -186,6 +314,67 @@ export default function RoomReservation() {
             </button>
           )}
         </div>
+
+        {/* 참석자 가용시간 & 최적 시간 추천 */}
+        {selectedParticipants.length > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-800">
+                  참석자 {selectedParticipants.length}명 선택됨
+                </span>
+                <label className="flex items-center gap-1.5 text-sm text-blue-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showAvailability}
+                    onChange={(e) => setShowAvailability(e.target.checked)}
+                    className="rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  바쁜 시간 표시
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-blue-600">회의 시간:</span>
+                <select
+                  value={meetingDuration}
+                  onChange={(e) => setMeetingDuration(Number(e.target.value))}
+                  className="px-2 py-1 text-xs border border-blue-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value={30}>30분</option>
+                  <option value={60}>1시간</option>
+                  <option value={90}>1시간 30분</option>
+                  <option value={120}>2시간</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 최적 시간 추천 */}
+            {optimalTimes.length > 0 && (
+              <div className="mt-2">
+                <div className="text-xs text-blue-600 mb-1.5">추천 시간 (모두 가능):</div>
+                <div className="flex flex-wrap gap-2">
+                  {optimalTimes.slice(0, 5).map((time, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => applyOptimalTime(time.startTime, time.endTime, selectedRoom)}
+                      className="px-3 py-1.5 text-sm bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {time.startTime} - {time.endTime}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {optimalTimes.length === 0 && selectedParticipants.length > 0 && (
+              <div className="mt-2 text-xs text-blue-600">
+                선택된 시간({meetingDuration}분) 동안 모두 가능한 시간이 없습니다.
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* 메인 컨텐츠 */}
@@ -252,13 +441,15 @@ export default function RoomReservation() {
                         const reservation = reservations[room.id]?.[slot];
                         const isHour = isHourStart(slot);
                         const inDragRange = isInDragRange(room.id, slotIndex);
+                        const isBusy = showAvailability && isParticipantBusy(slot);
 
                         return (
                           <div
                             key={slot}
                             onMouseDown={() => handleMouseDown(room.id, slotIndex, room)}
                             onMouseEnter={() => handleMouseEnter(room.id, slotIndex)}
-                            className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors ${
+                            onContextMenu={(e) => handleContextMenu(e, room.id, slotIndex, room)}
+                            className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative ${
                               isHour ? 'border-l border-gray-200' : 'border-l border-gray-100'
                             } ${
                               status === 'reserved'
@@ -267,10 +458,19 @@ export default function RoomReservation() {
                                 ? 'bg-blue-500'
                                 : inDragRange
                                 ? 'bg-blue-300'
+                                : isBusy
+                                ? 'bg-orange-100 hover:bg-orange-200'
                                 : 'hover:bg-blue-100'
                             }`}
-                            title={`${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})` : '예약 가능'}`}
-                          />
+                            title={`${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})` : isBusy ? '참석자 일정 있음' : '예약 가능'}`}
+                          >
+                            {/* 바쁜 시간대 표시 패턴 */}
+                            {isBusy && status === 'available' && !inDragRange && (
+                              <div className="absolute inset-0 opacity-50" style={{
+                                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(251, 146, 60, 0.3) 2px, rgba(251, 146, 60, 0.3) 4px)'
+                              }} />
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -281,22 +481,32 @@ export default function RoomReservation() {
 
             {/* 범례 */}
             <div className="flex-shrink-0 px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-6 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 bg-white border border-gray-300 rounded"></div>
-                  <span>예약 가능</span>
+                  <span>가능</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                  <span>선택됨</span>
+                  <span>선택</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <div className="w-4 h-4 bg-red-200 rounded"></div>
                   <span>예약됨</span>
                 </div>
+                {showAvailability && selectedParticipants.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 bg-orange-100 rounded relative overflow-hidden">
+                      <div className="absolute inset-0" style={{
+                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(251, 146, 60, 0.5) 2px, rgba(251, 146, 60, 0.5) 4px)'
+                      }} />
+                    </div>
+                    <span>참석자 바쁨</span>
+                  </div>
+                )}
               </div>
               <div className="text-xs text-gray-500">
-                * 드래그하여 연속 시간 선택
+                드래그: 연속 선택 · 우클릭: 메뉴
               </div>
             </div>
           </div>
@@ -318,6 +528,160 @@ export default function RoomReservation() {
             setViewingRoom(null);
           }}
         />
+      )}
+
+      {/* 내 예약 모달 */}
+      {showMyReservations && (
+        <MyReservations onClose={() => setShowMyReservations(false)} />
+      )}
+
+      {/* 컨텍스트 메뉴 */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 메뉴 헤더 */}
+          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+            <div className="text-xs font-medium text-gray-700">{contextMenu.room.name}</div>
+            <div className="text-xs text-gray-500">{contextMenu.slot}</div>
+          </div>
+
+          {/* 예약 가능한 슬롯 */}
+          {contextMenu.status === 'available' && (
+            <>
+              <button
+                onClick={() => handleSelectDuration(30)}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                30분 선택
+              </button>
+              <button
+                onClick={() => handleSelectDuration(60)}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                1시간 선택
+              </button>
+              <button
+                onClick={() => handleSelectDuration(120)}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                2시간 선택
+              </button>
+              <button
+                onClick={handleSelectToNextHour}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                정시까지 선택
+              </button>
+              <div className="border-t border-gray-100 my-1" />
+              {selectedParticipants.length > 0 && optimalTimes.length > 0 && (
+                <div className="px-3 py-2">
+                  <div className="text-xs text-gray-500 mb-1">추천 시간:</div>
+                  {optimalTimes.slice(0, 3).map((time, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        applyOptimalTime(time.startTime, time.endTime, contextMenu.roomId);
+                        closeContextMenu();
+                      }}
+                      className="w-full px-2 py-1 text-xs text-left text-blue-600 hover:bg-blue-50 rounded"
+                    >
+                      {time.startTime} - {time.endTime}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 선택된 슬롯 */}
+          {contextMenu.status === 'selected' && (
+            <>
+              <button
+                onClick={() => {
+                  setShowModal(true);
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-sm text-left text-blue-600 hover:bg-blue-50 flex items-center gap-2 font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                예약하기
+              </button>
+              <button
+                onClick={() => {
+                  clearSelection();
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                선택 해제
+              </button>
+            </>
+          )}
+
+          {/* 예약된 슬롯 */}
+          {contextMenu.status === 'reserved' && contextMenu.reservation && (
+            <>
+              <div className="px-3 py-2 border-b border-gray-100">
+                <div className="text-sm font-medium text-gray-900">{contextMenu.reservation.title}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {contextMenu.reservation.startTime} - {contextMenu.reservation.endTime}
+                </div>
+                <div className="text-xs text-gray-500">
+                  주관: {contextMenu.reservation.organizer}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setViewingReservation(contextMenu.reservation);
+                  setViewingRoom(contextMenu.room);
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                상세 보기
+              </button>
+              {contextMenu.reservation.isMyReservation && (
+                <button
+                  onClick={() => {
+                    // 내 예약 편집으로 이동
+                    setShowMyReservations(true);
+                    closeContextMenu();
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  내 예약 관리
+                </button>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );

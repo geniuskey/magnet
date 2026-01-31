@@ -1,0 +1,125 @@
+site_name: Meeting Scheduler AI - Integration Guide
+site_url: https://geniuskey.github.io/magnet/
+site_description: 회의 일정 조율 AI 시스템 연동 가이드
+site_author: GeniusKey
+
+repo_name: geniuskey/magnet
+repo_url: https://github.com/geniuskey/magnet
+
+theme:
+  name: material
+  language: ko
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: 다크 모드로 전환
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: 라이트 모드로 전환
+  font:
+    text: Noto Sans KR
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang:
+        - ko
+        - en
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: geniuskey
+      repo: magnet
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/geniuskey/magnet
+  generator: false
+
+extra_css:
+  - assets/css/custom.css
+
+nav:
+  - Home: index.md
+  - 시작하기:
+    - getting-started/index.md
+    - 설치: getting-started/installation.md
+    - 빠른 시작: getting-started/quickstart.md
+    - 아키텍처: getting-started/architecture.md
+  - API 연동 가이드:
+    - api/index.md
+    - 직원 조회 API: api/employee-api.md
+    - 일정 조회 API: api/calendar-api.md
+    - 회의실 API: api/room-api.md
+  - 인증 연동:
+    - guides/index.md
+    - SSO 연동: guides/sso-integration.md
+    - OAuth 2.0 설정: guides/oauth-setup.md
+  - 레퍼런스:
+    - reference/index.md
+    - 데이터 모델: reference/data-models.md
+    - 에러 코드: reference/error-codes.md
+    - FAQ: reference/faq.md
