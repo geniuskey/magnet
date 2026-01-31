@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useReservation } from '../context/ReservationContext';
 
 export default function ReservationModal({ onClose }) {
@@ -28,8 +28,21 @@ export default function ReservationModal({ onClose }) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const formRef = useRef(null);
 
   const room = rooms.find(r => r.id === selectedRoom);
+
+  // Ctrl+Enter로 제출
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const sortedSlots = [...selectedTimeSlots].sort((a, b) =>
     a.timeSlot.localeCompare(b.timeSlot)
   );
@@ -105,7 +118,7 @@ export default function ReservationModal({ onClose }) {
           <h2 className="text-lg font-semibold text-gray-900">회의실 예약</h2>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit}>
           <div className="px-6 py-4 space-y-4">
             {error && (
               <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
@@ -239,22 +252,30 @@ export default function ReservationModal({ onClose }) {
             )}
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              disabled={isSubmitting}
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? '예약 중...' : '예약하기'}
-            </button>
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <span className="text-xs text-gray-400">
+              <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px]">Ctrl</kbd>
+              +
+              <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px]">Enter</kbd>
+              로 제출
+            </span>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={isSubmitting}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '예약 중...' : '예약하기'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

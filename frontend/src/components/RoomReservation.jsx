@@ -33,6 +33,7 @@ export default function RoomReservation() {
   const [viewingRoom, setViewingRoom] = useState(null);
   const [showAvailability, setShowAvailability] = useState(true); // 참석자 가용시간 표시 여부
   const [meetingDuration, setMeetingDuration] = useState(60); // 회의 시간 (분)
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false); // 단축키 도움말
 
   // 드래그 상태
   const [isDragging, setIsDragging] = useState(false);
@@ -156,6 +157,117 @@ export default function RoomReservation() {
       return () => window.removeEventListener('click', handleClick);
     }
   }, [contextMenu]);
+
+  // 키보드 단축키
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // 입력 필드에서는 단축키 비활성화
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        if (e.key === 'Escape') {
+          e.target.blur();
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case 'Escape':
+          // Esc: 모달 닫기 또는 선택 해제
+          if (showShortcutHelp) {
+            setShowShortcutHelp(false);
+          } else if (showModal) {
+            setShowModal(false);
+          } else if (showMyReservations) {
+            setShowMyReservations(false);
+          } else if (viewingReservation) {
+            setViewingReservation(null);
+            setViewingRoom(null);
+          } else if (contextMenu) {
+            closeContextMenu();
+          } else if (selectedTimeSlots.length > 0) {
+            clearSelection();
+          }
+          break;
+
+        case 'Enter':
+          // Enter: 예약 모달 열기 (선택된 슬롯이 있을 때)
+          if (!showModal && !showMyReservations && !viewingReservation && canCreateReservation) {
+            e.preventDefault();
+            setShowModal(true);
+          }
+          break;
+
+        case 'Delete':
+        case 'Backspace':
+          // Delete/Backspace: 선택 해제
+          if (!showModal && !showMyReservations && !viewingReservation && selectedTimeSlots.length > 0) {
+            e.preventDefault();
+            clearSelection();
+          }
+          break;
+
+        case 'ArrowLeft':
+          // 왼쪽 화살표: 이전 날짜
+          if (!showModal && !showMyReservations && !viewingReservation) {
+            e.preventDefault();
+            const prevDate = new Date(selectedDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            setSelectedDate(prevDate.toISOString().split('T')[0]);
+          }
+          break;
+
+        case 'ArrowRight':
+          // 오른쪽 화살표: 다음 날짜
+          if (!showModal && !showMyReservations && !viewingReservation) {
+            e.preventDefault();
+            const nextDate = new Date(selectedDate);
+            nextDate.setDate(nextDate.getDate() + 1);
+            setSelectedDate(nextDate.toISOString().split('T')[0]);
+          }
+          break;
+
+        case 't':
+        case 'T':
+          // T: 오늘로 이동
+          if (!showModal && !showMyReservations && !viewingReservation) {
+            e.preventDefault();
+            setSelectedDate(new Date().toISOString().split('T')[0]);
+          }
+          break;
+
+        case 'm':
+        case 'M':
+          // M: 내 예약 열기/닫기
+          if (!showModal && !viewingReservation) {
+            e.preventDefault();
+            setShowMyReservations(!showMyReservations);
+          }
+          break;
+
+        case '?':
+          // ?: 단축키 도움말
+          e.preventDefault();
+          setShowShortcutHelp(!showShortcutHelp);
+          break;
+
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    showModal,
+    showMyReservations,
+    viewingReservation,
+    showShortcutHelp,
+    contextMenu,
+    selectedTimeSlots,
+    selectedDate,
+    canCreateReservation,
+    clearSelection,
+    setSelectedDate,
+  ]);
 
   // 드래그 범위 내 슬롯인지 확인
   const isInDragRange = (roomId, slotIndex) => {
@@ -505,8 +617,15 @@ export default function RoomReservation() {
                   </div>
                 )}
               </div>
-              <div className="text-xs text-gray-500">
-                드래그: 연속 선택 · 우클릭: 메뉴
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span>드래그: 연속 선택 · 우클릭: 메뉴</span>
+                <button
+                  onClick={() => setShowShortcutHelp(true)}
+                  className="px-1.5 py-0.5 bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-mono transition-colors"
+                  title="키보드 단축키 (? 키)"
+                >
+                  ?
+                </button>
               </div>
             </div>
           </div>
@@ -683,6 +802,69 @@ export default function RoomReservation() {
           )}
         </div>
       )}
+
+      {/* 키보드 단축키 도움말 모달 */}
+      {showShortcutHelp && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowShortcutHelp(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">키보드 단축키</h2>
+              <button
+                onClick={() => setShowShortcutHelp(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4">
+              <div className="space-y-3">
+                <ShortcutRow keys={['Esc']} description="모달 닫기 / 선택 해제" />
+                <ShortcutRow keys={['Enter']} description="예약하기 (시간 선택 시)" />
+                <ShortcutRow keys={['Delete']} description="선택 해제" />
+                <div className="border-t border-gray-100 my-3" />
+                <ShortcutRow keys={['←']} description="이전 날짜" />
+                <ShortcutRow keys={['→']} description="다음 날짜" />
+                <ShortcutRow keys={['T']} description="오늘로 이동" />
+                <div className="border-t border-gray-100 my-3" />
+                <ShortcutRow keys={['M']} description="내 예약 열기/닫기" />
+                <ShortcutRow keys={['?']} description="단축키 도움말" />
+              </div>
+            </div>
+            <div className="px-6 py-3 bg-gray-50 rounded-b-xl border-t border-gray-100">
+              <p className="text-xs text-gray-500 text-center">
+                입력 필드에서는 단축키가 비활성화됩니다
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 단축키 행 컴포넌트
+function ShortcutRow({ keys, description }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1">
+        {keys.map((key, idx) => (
+          <kbd
+            key={idx}
+            className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm font-mono text-gray-700 min-w-[28px] text-center"
+          >
+            {key}
+          </kbd>
+        ))}
+      </div>
+      <span className="text-sm text-gray-600">{description}</span>
     </div>
   );
 }
