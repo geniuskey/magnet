@@ -158,6 +158,9 @@ export default function RoomReservation() {
     }
   }, [contextMenu]);
 
+  // 예약 생성 가능 여부
+  const canCreateReservation = selectedTimeSlots.length > 0 && selectedRoom;
+
   // 키보드 단축키
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -335,8 +338,6 @@ export default function RoomReservation() {
       return () => window.removeEventListener('mouseup', handleMouseUp);
     }
   }, [isDragging, handleMouseUp]);
-
-  const canCreateReservation = selectedTimeSlots.length > 0 && selectedRoom;
 
   // 시간 헤더용 - 정각만 표시
   const hourSlots = timeSlots.filter(slot => slot.endsWith(':00'));
