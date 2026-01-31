@@ -16,6 +16,11 @@ Meeting Scheduler AI는 LLM(Large Language Model)을 활용하여 자연어로 �
 - :material-door: **회의실 실시간 현황** - 건물/층별 회의실 예약 현황 확인
 - :material-repeat: **반복 회의 지원** - 매일, 매주, 격주, 매월 반복 예약
 
+<figure markdown="span">
+  ![Meeting Scheduler AI 메인 화면](assets/images/main-screen.png){ width="100%" }
+  <figcaption>Meeting Scheduler AI 메인 화면 - 회의실 타임라인과 AI 채팅</figcaption>
+</figure>
+
 ## 연동 대상 시스템
 
 본 시스템을 사내에 도입하기 위해 다음 시스템과의 연동이 필요합니다:
