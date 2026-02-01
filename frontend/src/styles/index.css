@@ -88,3 +88,19 @@ body {
 .option-card.selected {
   @apply border-primary-500 bg-primary-50;
 }
+
+/* 오른쪽 하단 기준 스케일 업 애니메이션 */
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.2s ease-out;
+}

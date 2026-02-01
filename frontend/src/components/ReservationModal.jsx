@@ -111,11 +111,11 @@ export default function ReservationModal({ onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">회의실 예약</h2>
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">회의실 예약</h2>
         </div>
 
         <form ref={formRef} onSubmit={handleSubmit}>
@@ -127,31 +127,31 @@ export default function ReservationModal({ onClose }) {
             )}
 
             {/* 회의실 정보 */}
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
                 </div>
                 <div>
-                  <div className="font-medium text-gray-900">{room?.name}</div>
-                  <div className="text-sm text-gray-500">수용 인원: {room?.capacity}명</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{room?.name}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">수용 인원: {room?.capacity}명</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-500">날짜:</span>
-                  <span className="ml-2 text-gray-900 font-medium">{selectedDate}</span>
+                  <span className="text-gray-500 dark:text-gray-400">날짜:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white font-medium">{selectedDate}</span>
                 </div>
                 <div>
-                  <span className="text-gray-500">시간:</span>
-                  <span className="ml-2 text-gray-900 font-medium">{startTime} - {endTime}</span>
+                  <span className="text-gray-500 dark:text-gray-400">시간:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white font-medium">{startTime} - {endTime}</span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-gray-500">소요 시간:</span>
-                  <span className="ml-2 text-gray-900 font-medium">
+                  <span className="text-gray-500 dark:text-gray-400">소요 시간:</span>
+                  <span className="ml-2 text-gray-900 dark:text-white font-medium">
                     {duration >= 60 ? `${Math.floor(duration / 60)}시간 ${duration % 60 > 0 ? `${duration % 60}분` : ''}` : `${duration}분`}
                   </span>
                 </div>
@@ -160,7 +160,7 @@ export default function ReservationModal({ onClose }) {
 
             {/* 회의 제목 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 회의 제목 <span className="text-red-500">*</span>
               </label>
               <input
@@ -168,20 +168,20 @@ export default function ReservationModal({ onClose }) {
                 value={meetingTitle}
                 onChange={(e) => setMeetingTitle(e.target.value)}
                 placeholder="회의 제목을 입력하세요"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 autoFocus
               />
             </div>
 
             {/* 반복 설정 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 반복
               </label>
               <select
                 value={recurrence}
                 onChange={(e) => setRecurrence(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 {Object.entries(recurrenceLabels).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
@@ -192,7 +192,7 @@ export default function ReservationModal({ onClose }) {
             {/* 반복 종료 날짜 */}
             {recurrence !== recurrenceTypes.NONE && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   반복 종료 날짜 <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -200,9 +200,9 @@ export default function ReservationModal({ onClose }) {
                   value={recurrenceEndDate}
                   onChange={(e) => setRecurrenceEndDate(e.target.value)}
                   min={selectedDate}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {recurrence === recurrenceTypes.DAILY && '매일 반복됩니다.'}
                   {recurrence === recurrenceTypes.WEEKLY && '매주 같은 요일에 반복됩니다.'}
                   {recurrence === recurrenceTypes.BIWEEKLY && '격주 같은 요일에 반복됩니다.'}
@@ -214,14 +214,14 @@ export default function ReservationModal({ onClose }) {
             {/* 참석자 (Entity 기반으로 표시) */}
             {selectedEntities.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   참석자 ({selectedParticipants.length}명)
                 </label>
                 <div className="space-y-2">
                   {/* 주관자 */}
                   {selectedEntities.filter(e => e.attendeeType === attendeeTypes.ORGANIZER).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="text-xs text-purple-600 font-medium mr-1">주관:</span>
+                      <span className="text-xs text-purple-600 dark:text-purple-400 font-medium mr-1">주관:</span>
                       {selectedEntities.filter(e => e.attendeeType === attendeeTypes.ORGANIZER).map(entity => (
                         <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="purple" />
                       ))}
@@ -231,7 +231,7 @@ export default function ReservationModal({ onClose }) {
                   {/* 필수 참석자 */}
                   {selectedEntities.filter(e => e.attendeeType === attendeeTypes.REQUIRED).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="text-xs text-blue-600 font-medium mr-1">필수:</span>
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium mr-1">필수:</span>
                       {selectedEntities.filter(e => e.attendeeType === attendeeTypes.REQUIRED).map(entity => (
                         <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="blue" />
                       ))}
@@ -241,7 +241,7 @@ export default function ReservationModal({ onClose }) {
                   {/* 선택 참석자 */}
                   {selectedEntities.filter(e => e.attendeeType === attendeeTypes.OPTIONAL).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="text-xs text-gray-500 font-medium mr-1">선택:</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-medium mr-1">선택:</span>
                       {selectedEntities.filter(e => e.attendeeType === attendeeTypes.OPTIONAL).map(entity => (
                         <EntityChip key={`${entity.type}_${entity.id}`} entity={entity} selectionTypes={selectionTypes} color="gray" />
                       ))}
@@ -252,18 +252,18 @@ export default function ReservationModal({ onClose }) {
             )}
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <span className="text-xs text-gray-400">
-              <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px]">Ctrl</kbd>
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-[10px]">Ctrl</kbd>
               +
-              <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px]">Enter</kbd>
+              <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-[10px]">Enter</kbd>
               로 제출
             </span>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 disabled={isSubmitting}
               >
                 취소
@@ -302,9 +302,9 @@ function EntityChip({ entity, selectionTypes, color }) {
   };
 
   const colorClasses = {
-    purple: 'bg-purple-100 text-purple-700',
-    blue: 'bg-blue-100 text-blue-700',
-    gray: 'bg-gray-100 text-gray-600',
+    purple: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300',
+    blue: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300',
+    gray: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
   };
 
   return (

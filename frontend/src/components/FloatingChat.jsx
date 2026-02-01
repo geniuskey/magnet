@@ -5,6 +5,9 @@ import TypingIndicator from './TypingIndicator';
 
 const STORAGE_KEY = 'floating_chat_position';
 
+// 기본 위치 (오른쪽 하단, 미니맵 위)
+const DEFAULT_POSITION = { right: 24, bottom: 72 }; // right-6, bottom-[72px] (미니맵 h-12 + 여유 공간)
+
 // 엔티티 매칭 유틸
 const extractActions = (text, { buildings, employees, allRooms }) => {
   const actions = [];
@@ -99,7 +102,7 @@ export default function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [position, setPosition] = useState(() => loadPosition() || { x: null, y: null });
+  const [position, setPosition] = useState(() => loadPosition() || DEFAULT_POSITION);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -197,9 +200,10 @@ export default function FloatingChat() {
   const handleMouseDown = useCallback((e) => {
     if (chatRef.current) {
       const rect = chatRef.current.getBoundingClientRect();
+      // 오른쪽 하단 기준으로 오프셋 계산
       setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: rect.right - e.clientX,
+        y: rect.bottom - e.clientY,
       });
       setIsDragging(true);
     }
@@ -209,29 +213,29 @@ export default function FloatingChat() {
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
 
-    const chatWidth = 384; // w-96 = 24rem = 384px
-    const chatHeight = 512; // h-[32rem] = 512px
+    // 열린 상태: 384x512, 닫힌/최소화 상태: 56x56 (버튼)
+    const elementWidth = isOpen && !isMinimized ? 384 : 56;
+    const elementHeight = isOpen && !isMinimized ? 512 : 56;
 
-    let newX = e.clientX - dragOffset.x;
-    let newY = e.clientY - dragOffset.y;
+    // 오른쪽 하단 기준으로 위치 계산
+    let newRight = window.innerWidth - e.clientX - dragOffset.x;
+    let newBottom = window.innerHeight - e.clientY - dragOffset.y;
 
     // 화면 경계 체크
-    const maxX = window.innerWidth - chatWidth;
-    const maxY = window.innerHeight - chatHeight;
+    newRight = Math.max(0, Math.min(newRight, window.innerWidth - elementWidth));
+    newBottom = Math.max(0, Math.min(newBottom, window.innerHeight - elementHeight));
 
-    newX = Math.max(0, Math.min(newX, maxX));
-    newY = Math.max(0, Math.min(newY, maxY));
+    setPosition({ right: newRight, bottom: newBottom });
+  }, [isDragging, dragOffset, isOpen, isMinimized]);
 
-    setPosition({ x: newX, y: newY });
-  }, [isDragging, dragOffset]);
+  // 위치가 기본 위치와 다른지 확인
+  const isCustomPosition = position.right !== DEFAULT_POSITION.right || position.bottom !== DEFAULT_POSITION.bottom;
 
   // 드래그 종료
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
       setIsDragging(false);
-      if (position.x !== null && position.y !== null) {
-        savePosition(position);
-      }
+      savePosition(position);
     }
   }, [isDragging, position]);
 
@@ -312,42 +316,57 @@ export default function FloatingChat() {
 
   // 위치 초기화 (기본 위치로)
   const resetPosition = () => {
-    setPosition({ x: null, y: null });
+    setPosition(DEFAULT_POSITION);
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  // 채팅창 스타일 계산
-  const getChatStyle = () => {
-    if (position.x !== null && position.y !== null) {
-      return {
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        right: 'auto',
-        bottom: 'auto',
-      };
-    }
-    return {};
+  // 오른쪽 하단 기준 스타일 계산
+  const getPositionStyle = () => {
+    return {
+      right: `${position.right}px`,
+      bottom: `${position.bottom}px`,
+    };
+  };
+
+  // 버튼 드래그 핸들러
+  const handleButtonMouseDown = (e) => {
+    // 우클릭 무시
+    if (e.button !== 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    // 오른쪽 하단 기준으로 오프셋 계산
+    setDragOffset({
+      x: rect.right - e.clientX,
+      y: rect.bottom - e.clientY,
+    });
+    setIsDragging(true);
+    e.preventDefault();
   };
 
   // 플로팅 버튼 (닫힌 상태)
   if (!isOpen) {
     return (
-      <button
-        onClick={toggleOpen}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50 group"
+      <div
+        className={`fixed w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center z-50 group ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={getPositionStyle()}
+        onMouseDown={handleButtonMouseDown}
+        onClick={(e) => {
+          // 드래그 후 클릭 방지
+          if (!isDragging) toggleOpen();
+        }}
       >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
         </svg>
-        <span className="absolute right-full mr-3 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="absolute right-full mr-3 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
           AI 어시스턴트
         </span>
         {allMessages.length > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center pointer-events-none">
             {allMessages.length}
           </span>
         )}
-      </button>
+      </div>
     );
   }
 
@@ -355,15 +374,19 @@ export default function FloatingChat() {
   if (isMinimized) {
     return (
       <div
-        onClick={toggleMinimize}
-        className="fixed bottom-6 right-6 bg-white rounded-full shadow-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:shadow-xl transition-all z-50"
+        className={`fixed bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-3 flex items-center gap-3 hover:shadow-xl transition-all z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={getPositionStyle()}
+        onMouseDown={handleButtonMouseDown}
+        onClick={(e) => {
+          if (!isDragging) toggleMinimize(e);
+        }}
       >
         <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
           <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
         </div>
-        <span className="text-sm font-medium text-gray-700">AI 어시스턴트</span>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">AI 어시스턴트</span>
         <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
         </svg>
@@ -375,10 +398,8 @@ export default function FloatingChat() {
   return (
     <div
       ref={chatRef}
-      className={`fixed w-96 h-[32rem] bg-white rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-200 ${
-        position.x === null ? 'bottom-6 right-6' : ''
-      } ${isDragging ? 'select-none' : ''}`}
-      style={getChatStyle()}
+      className={`fixed w-96 h-[32rem] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl flex flex-col z-50 overflow-hidden border border-gray-200 dark:border-gray-700 origin-bottom-right animate-scale-up ${isDragging ? 'select-none' : ''}`}
+      style={getPositionStyle()}
     >
       {/* 헤더 - 드래그 가능 */}
       <div
@@ -399,7 +420,7 @@ export default function FloatingChat() {
           </div>
         </div>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
-          {position.x !== null && (
+          {isCustomPosition && (
             <button
               onClick={resetPosition}
               className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
@@ -441,22 +462,22 @@ export default function FloatingChat() {
       </div>
 
       {/* 메시지 영역 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
         {allMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
             </div>
-            <p className="text-gray-600 font-medium mb-2">무엇을 도와드릴까요?</p>
-            <p className="text-gray-400 text-sm mb-4">
+            <p className="text-gray-600 dark:text-gray-300 font-medium mb-2">무엇을 도와드릴까요?</p>
+            <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">
               예: "김철수, 이영희와 내일 오후 2시에 본관 2층 대회의실 예약해줘"
             </p>
             {reservation.selectedParticipants.length > 0 && (
               <button
                 onClick={handleFindOptimalTimes}
-                className="px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg hover:bg-green-200 transition-colors flex items-center gap-2"
+                className="px-3 py-2 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-sm rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -478,14 +499,14 @@ export default function FloatingChat() {
                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white rounded-br-md'
-                        : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-md'
+                        : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 shadow-sm border border-gray-100 dark:border-gray-600 rounded-bl-md'
                     }`}
                   >
                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     {/* 최적 시간 선택 버튼 */}
                     {msg.optimalTimes && msg.optimalTimes.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 mb-1.5">시간 선택:</p>
+                      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">시간 선택:</p>
                         <div className="flex flex-wrap gap-1">
                           {msg.optimalTimes.map((time, timeIdx) => (
                             <button
@@ -497,7 +518,7 @@ export default function FloatingChat() {
                                   alert('먼저 회의실을 선택해주세요.');
                                 }
                               }}
-                              className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-colors"
+                              className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
                             >
                               {time.startTime} ~ {time.endTime}
                             </button>
@@ -507,8 +528,8 @@ export default function FloatingChat() {
                     )}
                     {/* 빠른 적용 버튼 */}
                     {actions.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <p className="text-xs text-gray-500 mb-1.5">빠른 적용:</p>
+                      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">빠른 적용:</p>
                         <div className="flex flex-wrap gap-1">
                           {actions.map((action, actionIdx) => {
                             const key = `${idx}_${action.type}_${action.label}`;
@@ -520,8 +541,8 @@ export default function FloatingChat() {
                                 disabled={isApplied}
                                 className={`px-2 py-1 text-xs rounded-full transition-colors ${
                                   isApplied
-                                    ? 'bg-green-100 text-green-700 cursor-default'
-                                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                    ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-default'
+                                    : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800'
                                 }`}
                               >
                                 {isApplied ? '✓ ' : ''}{action.label}
@@ -537,7 +558,7 @@ export default function FloatingChat() {
             })}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-gray-100">
+                <div className="bg-white dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-600">
                   <TypingIndicator />
                 </div>
               </div>
@@ -548,7 +569,7 @@ export default function FloatingChat() {
       </div>
 
       {/* 입력 영역 */}
-      <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-gray-200">
+      <form onSubmit={handleSubmit} className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
@@ -558,7 +579,7 @@ export default function FloatingChat() {
               onKeyDown={handleKeyDown}
               placeholder="메시지를 입력하세요..."
               rows={1}
-              className="w-full px-4 py-2.5 pr-12 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+              className="w-full px-4 py-2.5 pr-12 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
               style={{ maxHeight: '100px' }}
             />
           </div>

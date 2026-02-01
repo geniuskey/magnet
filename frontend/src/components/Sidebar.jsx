@@ -32,6 +32,8 @@ export default function Sidebar() {
   const [editingEntity, setEditingEntity] = useState(null); // { type, id }
   const [draggedEntity, setDraggedEntity] = useState(null);
   const [dragOverZone, setDragOverZone] = useState(null); // 'organizer', 'required', 'optional'
+  const [isTeamsFolded, setIsTeamsFolded] = useState(false);
+  const [isGroupsFolded, setIsGroupsFolded] = useState(false);
 
   // 팀별 인원수
   const teamCounts = useMemo(() => {
@@ -78,10 +80,10 @@ export default function Sidebar() {
 
   const getTypeColor = (type) => {
     switch (type) {
-      case attendeeTypes.ORGANIZER: return 'bg-purple-100 text-purple-700 border-purple-300';
-      case attendeeTypes.REQUIRED: return 'bg-blue-100 text-blue-700 border-blue-300';
-      case attendeeTypes.OPTIONAL: return 'bg-gray-100 text-gray-600 border-gray-300';
-      default: return 'bg-gray-100 text-gray-600';
+      case attendeeTypes.ORGANIZER: return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700';
+      case attendeeTypes.REQUIRED: return 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700';
+      case attendeeTypes.OPTIONAL: return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600';
+      default: return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
     }
   };
 
@@ -128,10 +130,10 @@ export default function Sidebar() {
 
   if (isCollapsed) {
     return (
-      <aside className="w-12 bg-white border-r border-gray-200 flex flex-col items-center py-4">
+      <aside className="w-12 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 transition-colors">
         <button
           onClick={() => setIsCollapsed(false)}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
           title="참여자 목록 열기"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,14 +150,14 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors">
       {/* 헤더 */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-800">참석자 관리</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">참석자 관리</h2>
           <button
             onClick={() => setIsCollapsed(true)}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
             title="접기"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +167,7 @@ export default function Sidebar() {
         </div>
 
         {/* 탭 (2개만) */}
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
           {[
             { id: 'teams', label: '팀/그룹' },
             { id: 'employees', label: '임직원' },
@@ -175,8 +177,8 @@ export default function Sidebar() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               {tab.label}
@@ -187,14 +189,14 @@ export default function Sidebar() {
 
       {/* 선택된 항목 - 드래그 앤 드롭으로 유형 변경 */}
       {selectedEntities.length > 0 && (
-        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-600">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
               선택됨 ({selectedParticipants.length}명)
             </span>
             <button
               onClick={clearAttendees}
-              className="text-xs text-red-500 hover:text-red-700"
+              className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
             >
               전체 삭제
             </button>
@@ -294,13 +296,13 @@ export default function Sidebar() {
             />
           </div>
 
-          <p className="mt-2 text-[10px] text-gray-400">드래그하여 유형 변경 / 클릭하여 메뉴</p>
+          <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">드래그하여 유형 변경 / 클릭하여 메뉴</p>
         </div>
       )}
 
       {/* 추가 시 참석자 유형 선택 */}
-      <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
-        <div className="text-xs text-gray-500 mb-1.5">추가 시 참석자 유형:</div>
+      <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">추가 시 참석자 유형:</div>
         <div className="flex gap-1">
           {[
             { type: attendeeTypes.ORGANIZER, label: '주관자', color: 'purple', individualOnly: true },
@@ -317,10 +319,10 @@ export default function Sidebar() {
                 disabled={disabled}
                 className={`flex-1 py-1 text-xs font-medium rounded transition-colors ${
                   disabled
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                     : addAsType === type
                       ? `ring-1`
-                      : 'bg-white text-gray-600 hover:bg-gray-100'
+                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                 }`}
                 style={{
                   backgroundColor: !disabled && addAsType === type
@@ -342,100 +344,130 @@ export default function Sidebar() {
       {activeTab === 'teams' && (
         <div className="flex-1 overflow-y-auto">
           {/* 팀 목록 */}
-          <div className="border-b border-gray-100">
-            <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          <div className="border-b border-gray-100 dark:border-gray-700">
+            <button
+              onClick={() => setIsTeamsFolded(!isTeamsFolded)}
+              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                조직 ({teams.length}개 팀)
+              </div>
+              <svg
+                className={`w-4 h-4 transition-transform ${isTeamsFolded ? '-rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-              조직 ({teams.length}개 팀)
-            </div>
-            <ul>
-              {teams.map(team => {
-                const added = isTeamAdded(team.id);
-                // 팀은 주관자가 될 수 없으므로, 주관자 선택 시 필수로 강제
-                const effectiveType = addAsType === attendeeTypes.ORGANIZER ? attendeeTypes.REQUIRED : addAsType;
+            </button>
+            {!isTeamsFolded && (
+              <ul>
+                {teams.map(team => {
+                  const added = isTeamAdded(team.id);
+                  // 팀은 주관자가 될 수 없으므로, 주관자 선택 시 필수로 강제
+                  const effectiveType = addAsType === attendeeTypes.ORGANIZER ? attendeeTypes.REQUIRED : addAsType;
 
-                return (
-                  <li
-                    key={team.id}
-                    className={`px-4 py-3 border-b border-gray-50 last:border-b-0 ${added ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{team.name}</div>
-                        <div className="text-xs text-gray-500">{teamCounts[team.id] || 0}명</div>
+                  return (
+                    <li
+                      key={team.id}
+                      className={`px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-b-0 ${added ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">{team.name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{teamCounts[team.id] || 0}명</div>
+                        </div>
+                        {added ? (
+                          <span className="px-2 py-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 rounded">
+                            추가됨
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => addTeamAsAttendees(team.id, effectiveType)}
+                            className="px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors"
+                          >
+                            전체 추가
+                          </button>
+                        )}
                       </div>
-                      {added ? (
-                        <span className="px-2 py-1 text-xs text-blue-600 bg-blue-100 rounded">
-                          추가됨
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => addTeamAsAttendees(team.id, effectiveType)}
-                          className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-                        >
-                          전체 추가
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
           {/* 내 그룹 목록 */}
           <div>
-            <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            <button
+              onClick={() => setIsGroupsFolded(!isGroupsFolded)}
+              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                내 주소록 ({myGroups.length}개 그룹)
+              </div>
+              <svg
+                className={`w-4 h-4 transition-transform ${isGroupsFolded ? '-rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-              내 주소록 ({myGroups.length}개 그룹)
-            </div>
-            <ul>
-              {myGroups.map(group => {
-                const addedCount = getGroupAddedCount(group.id);
-                const allAdded = addedCount === group.members.length;
-                // 그룹도 주관자가 될 수 없으므로, 주관자 선택 시 필수로 강제
-                const effectiveType = addAsType === attendeeTypes.ORGANIZER ? attendeeTypes.REQUIRED : addAsType;
+            </button>
+            {!isGroupsFolded && (
+              <ul>
+                {myGroups.map(group => {
+                  const addedCount = getGroupAddedCount(group.id);
+                  const allAdded = addedCount === group.members.length;
+                  // 그룹도 주관자가 될 수 없으므로, 주관자 선택 시 필수로 강제
+                  const effectiveType = addAsType === attendeeTypes.ORGANIZER ? attendeeTypes.REQUIRED : addAsType;
 
-                return (
-                  <li
-                    key={group.id}
-                    className={`px-4 py-3 border-b border-gray-50 last:border-b-0 ${allAdded ? 'bg-green-50' : 'hover:bg-gray-50'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-900">{group.name}</span>
-                          {addedCount > 0 && !allAdded && (
-                            <span className="text-[10px] text-green-600 bg-green-100 px-1 rounded">
-                              {addedCount}/{group.members.length}
-                            </span>
-                          )}
+                  return (
+                    <li
+                      key={group.id}
+                      className={`px-4 py-3 border-b border-gray-50 dark:border-gray-700 last:border-b-0 ${allAdded ? 'bg-green-50 dark:bg-green-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">{group.name}</span>
+                            {addedCount > 0 && !allAdded && (
+                              <span className="text-[10px] text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-1 rounded">
+                                {addedCount}/{group.members.length}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{group.description}</div>
+                          <div className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                            {groupMemberNames[group.id]}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500 truncate">{group.description}</div>
-                        <div className="text-xs text-gray-400 truncate mt-0.5">
-                          {groupMemberNames[group.id]}
-                        </div>
+                        {allAdded ? (
+                          <span className="ml-2 px-2 py-1 text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 rounded flex-shrink-0">
+                            추가됨
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => addGroupAsAttendees(group.id, effectiveType)}
+                            className="ml-2 px-2 py-1 text-xs bg-green-50 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded hover:bg-green-100 dark:hover:bg-green-900 transition-colors flex-shrink-0"
+                          >
+                            추가
+                          </button>
+                        )}
                       </div>
-                      {allAdded ? (
-                        <span className="ml-2 px-2 py-1 text-xs text-green-600 bg-green-100 rounded flex-shrink-0">
-                          추가됨
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => addGroupAsAttendees(group.id, effectiveType)}
-                          className="ml-2 px-2 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors flex-shrink-0"
-                        >
-                          추가
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
       )}
@@ -444,17 +476,17 @@ export default function Sidebar() {
       {activeTab === 'employees' && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 검색 및 필터 */}
-          <div className="p-3 border-b border-gray-100 space-y-2">
+          <div className="p-3 border-b border-gray-100 dark:border-gray-700 space-y-2">
             <div className="relative">
               <input
                 type="text"
                 placeholder="이름, 부서, 이메일 검색..."
                 value={employeeSearchQuery}
                 onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
               />
               <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -465,7 +497,7 @@ export default function Sidebar() {
             <select
               value={selectedTeamFilter || ''}
               onChange={(e) => setSelectedTeamFilter(e.target.value || null)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="">전체 부서</option>
               {teams.map(team => (
@@ -476,7 +508,7 @@ export default function Sidebar() {
 
           {/* 임직원 목록 */}
           <div className="flex-1 overflow-y-auto">
-            <div className="px-3 py-2 bg-gray-50 text-xs text-gray-500 border-b border-gray-100">
+            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
               {filteredEmployees.length}명 검색됨
             </div>
             <ul>
@@ -487,28 +519,28 @@ export default function Sidebar() {
                   <li
                     key={emp.id}
                     onClick={() => addAttendee(emp, addAsType)}
-                    className={`px-3 py-2 cursor-pointer transition-colors border-b border-gray-50 ${
+                    className={`px-3 py-2 cursor-pointer transition-colors border-b border-gray-50 dark:border-gray-700 ${
                       isSelected
-                        ? 'bg-blue-50'
-                        : 'hover:bg-gray-50'
+                        ? 'bg-blue-50 dark:bg-blue-900/30'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${
-                        isSelected ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'
+                        isSelected ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
                       }`}>
                         {emp.name.slice(0, 2)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-gray-900">{emp.name}</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">{emp.name}</span>
                           {type && (
                             <span className={`px-1.5 py-0.5 text-[10px] rounded ${getTypeColor(type)}`}>
                               {getTypeLabel(type)}
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500 truncate">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                           {emp.department} · {emp.position}
                         </div>
                       </div>
@@ -520,7 +552,7 @@ export default function Sidebar() {
             {visibleCount < filteredEmployees.length && (
               <button
                 onClick={handleLoadMore}
-                className="w-full py-3 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+                className="w-full py-3 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
               >
                 더 보기 ({filteredEmployees.length - visibleCount}명 남음)
               </button>
@@ -561,25 +593,25 @@ function DropZone({
 
   const colorClasses = {
     purple: {
-      bg: 'bg-purple-50',
-      border: 'border-purple-200',
-      hoverBorder: 'border-purple-400',
-      text: 'text-purple-700',
-      label: 'text-purple-600',
+      bg: 'bg-purple-50 dark:bg-purple-900/30',
+      border: 'border-purple-200 dark:border-purple-700',
+      hoverBorder: 'border-purple-400 dark:border-purple-500',
+      text: 'text-purple-700 dark:text-purple-300',
+      label: 'text-purple-600 dark:text-purple-400',
     },
     blue: {
-      bg: 'bg-blue-50',
-      border: 'border-blue-200',
-      hoverBorder: 'border-blue-400',
-      text: 'text-blue-700',
-      label: 'text-blue-600',
+      bg: 'bg-blue-50 dark:bg-blue-900/30',
+      border: 'border-blue-200 dark:border-blue-700',
+      hoverBorder: 'border-blue-400 dark:border-blue-500',
+      text: 'text-blue-700 dark:text-blue-300',
+      label: 'text-blue-600 dark:text-blue-400',
     },
     gray: {
-      bg: 'bg-gray-100',
-      border: 'border-gray-200',
-      hoverBorder: 'border-gray-400',
-      text: 'text-gray-700',
-      label: 'text-gray-500',
+      bg: 'bg-gray-100 dark:bg-gray-700',
+      border: 'border-gray-200 dark:border-gray-600',
+      hoverBorder: 'border-gray-400 dark:border-gray-500',
+      text: 'text-gray-700 dark:text-gray-300',
+      label: 'text-gray-500 dark:text-gray-400',
     },
   };
 
@@ -601,7 +633,7 @@ function DropZone({
           ? `${colors.bg} ${colors.hoverBorder} scale-[1.02]`
           : entities.length > 0
           ? `${colors.bg} ${colors.border}`
-          : `bg-white ${colors.border} opacity-60`
+          : `bg-white dark:bg-gray-800 ${colors.border} opacity-60`
       }`}
     >
       <div className={`text-[10px] font-medium mb-1 ${colors.label}`}>
@@ -650,12 +682,12 @@ function DropZone({
               {isEditing && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={onEditClose} />
-                  <div className="absolute left-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20 min-w-[80px]">
+                  <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[80px]">
                     {!isTeam && (
                       <button
                         onClick={() => onTypeChange(attendeeTypes.ORGANIZER)}
-                        className={`w-full px-2 py-1 text-[11px] text-left hover:bg-purple-50 ${
-                          entity.attendeeType === attendeeTypes.ORGANIZER ? 'font-medium text-purple-600 bg-purple-50' : 'text-gray-700'
+                        className={`w-full px-2 py-1 text-[11px] text-left hover:bg-purple-50 dark:hover:bg-purple-900/30 ${
+                          entity.attendeeType === attendeeTypes.ORGANIZER ? 'font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30' : 'text-gray-700 dark:text-gray-300'
                         }`}
                       >
                         주관자
@@ -663,16 +695,16 @@ function DropZone({
                     )}
                     <button
                       onClick={() => onTypeChange(attendeeTypes.REQUIRED)}
-                      className={`w-full px-2 py-1 text-[11px] text-left hover:bg-blue-50 ${
-                        entity.attendeeType === attendeeTypes.REQUIRED ? 'font-medium text-blue-600 bg-blue-50' : 'text-gray-700'
+                      className={`w-full px-2 py-1 text-[11px] text-left hover:bg-blue-50 dark:hover:bg-blue-900/30 ${
+                        entity.attendeeType === attendeeTypes.REQUIRED ? 'font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30' : 'text-gray-700 dark:text-gray-300'
                       }`}
                     >
                       필수
                     </button>
                     <button
                       onClick={() => onTypeChange(attendeeTypes.OPTIONAL)}
-                      className={`w-full px-2 py-1 text-[11px] text-left hover:bg-gray-100 ${
-                        entity.attendeeType === attendeeTypes.OPTIONAL ? 'font-medium text-gray-600 bg-gray-100' : 'text-gray-700'
+                      className={`w-full px-2 py-1 text-[11px] text-left hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        entity.attendeeType === attendeeTypes.OPTIONAL ? 'font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700' : 'text-gray-700 dark:text-gray-300'
                       }`}
                     >
                       선택
@@ -684,7 +716,7 @@ function DropZone({
           );
         })}
         {entities.length === 0 && (
-          <span className="text-[10px] text-gray-400 italic">여기로 드래그</span>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 italic">여기로 드래그</span>
         )}
       </div>
     </div>

@@ -59,6 +59,8 @@ export default function RoomReservation() {
 
   // 미니맵 상태
   const [viewportPosition, setViewportPosition] = useState({ left: 0, width: 100 });
+  const [isMinimapDragging, setIsMinimapDragging] = useState(false);
+  const [minimapDragStart, setMinimapDragStart] = useState(null); // { mouseX, scrollLeft }
 
   const scrollContainerRef = useRef(null);
   const minimapRef = useRef(null);
@@ -386,6 +388,9 @@ export default function RoomReservation() {
 
   // 미니맵 클릭으로 스크롤
   const handleMinimapClick = (e) => {
+    // 드래그 중이면 클릭 무시
+    if (isMinimapDragging) return;
+
     const minimap = minimapRef.current;
     const container = scrollContainerRef.current;
     if (!minimap || !container) return;
@@ -399,6 +404,60 @@ export default function RoomReservation() {
 
     container.scrollTo({ left: Math.max(0, targetScroll), behavior: 'smooth' });
   };
+
+  // 미니맵 뷰포트 드래그 시작
+  const handleMinimapDragStart = (e) => {
+    e.stopPropagation();
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    setIsMinimapDragging(true);
+    setMinimapDragStart({
+      mouseX: e.clientX,
+      scrollLeft: container.scrollLeft,
+    });
+  };
+
+  // 미니맵 뷰포트 드래그 중
+  const handleMinimapDragMove = useCallback((e) => {
+    if (!isMinimapDragging || !minimapDragStart) return;
+
+    const minimap = minimapRef.current;
+    const container = scrollContainerRef.current;
+    if (!minimap || !container) return;
+
+    const rect = minimap.getBoundingClientRect();
+    const deltaX = e.clientX - minimapDragStart.mouseX;
+
+    // 미니맵 이동량을 실제 스크롤 이동량으로 변환
+    const totalScrollWidth = container.scrollWidth - 128;
+    const scrollDelta = (deltaX / rect.width) * totalScrollWidth;
+
+    const newScrollLeft = Math.max(0, Math.min(
+      minimapDragStart.scrollLeft + scrollDelta,
+      container.scrollWidth - container.clientWidth
+    ));
+
+    container.scrollLeft = newScrollLeft;
+  }, [isMinimapDragging, minimapDragStart]);
+
+  // 미니맵 뷰포트 드래그 종료
+  const handleMinimapDragEnd = useCallback(() => {
+    setIsMinimapDragging(false);
+    setMinimapDragStart(null);
+  }, []);
+
+  // 미니맵 드래그 전역 이벤트
+  useEffect(() => {
+    if (isMinimapDragging) {
+      window.addEventListener('mousemove', handleMinimapDragMove);
+      window.addEventListener('mouseup', handleMinimapDragEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleMinimapDragMove);
+        window.removeEventListener('mouseup', handleMinimapDragEnd);
+      };
+    }
+  }, [isMinimapDragging, handleMinimapDragMove, handleMinimapDragEnd]);
 
   // 선택 영역의 시작/끝 슬롯 인덱스
   const selectedSlotRange = useMemo(() => {
@@ -584,6 +643,7 @@ export default function RoomReservation() {
               onClick={toggleTheme}
               className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title={isDark ? '라이트 모드' : '다크 모드'}
+              aria-label={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
             >
               {isDark ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -598,13 +658,14 @@ export default function RoomReservation() {
             <button
               onClick={() => setShowMyReservations(true)}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              aria-label={myReservations.length > 0 ? `내 예약 ${myReservations.length}건` : '내 예약'}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               내 예약
               {myReservations.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full" aria-hidden="true">
                   {myReservations.length}
                 </span>
               )}
@@ -766,7 +827,7 @@ export default function RoomReservation() {
         ) : (
           <div className="h-full flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden select-none transition-colors">
             {/* 스크롤 가능한 그리드 영역 */}
-            <div className="flex-1 overflow-auto" ref={scrollContainerRef}>
+            <div className="flex-1 overflow-auto overscroll-contain" ref={scrollContainerRef}>
               <div className="inline-block min-w-full">
                 {/* 시간 헤더 */}
                 <div className="flex sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
@@ -804,13 +865,23 @@ export default function RoomReservation() {
                         const inDragRange = isInDragRange(room.id, slotIndex);
                         const isBusy = showAvailability && isParticipantBusy(slot);
                         const edge = getSlotEdge(room.id, slotIndex);
+                        const slotLabel = `${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})${reservation.isMyReservation ? ' - 드래그하여 이동' : ''}` : isBusy ? '참석자 일정 있음' : '예약 가능'}`;
 
                         return (
                           <div
                             key={slot}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={slotLabel}
                             onMouseDown={(e) => {
                               // 리사이즈 핸들 클릭이 아닌 경우에만 일반 드래그 시작
                               if (!e.target.classList.contains('resize-handle')) {
+                                handleMouseDown(room.id, slotIndex, room);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
                                 handleMouseDown(room.id, slotIndex, room);
                               }
                             }}
@@ -824,7 +895,7 @@ export default function RoomReservation() {
                               }
                             }}
                             onContextMenu={(e) => handleContextMenu(e, room.id, slotIndex, room)}
-                            className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative ${
+                            className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
                               isHour ? 'border-l border-gray-200 dark:border-gray-600' : 'border-l border-gray-100 dark:border-gray-700'
                             } ${
                               // 이동 미리보기
@@ -842,7 +913,7 @@ export default function RoomReservation() {
                                 ? 'bg-orange-100 dark:bg-orange-900 hover:bg-orange-200 dark:hover:bg-orange-800'
                                 : 'hover:bg-blue-100 dark:hover:bg-blue-900'
                             }`}
-                            title={`${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})${reservation.isMyReservation ? ' - 드래그하여 이동' : ''}` : isBusy ? '참석자 일정 있음' : '예약 가능'}`}
+                            title={slotLabel}
                           >
                             {/* 내 예약 드래그 시작 */}
                             {status === 'reserved' && reservation?.isMyReservation && (
@@ -880,15 +951,31 @@ export default function RoomReservation() {
               </div>
             </div>
 
-            {/* 미니맵 */}
+            {/* 미니맵 - 수평 스크롤 역할 */}
             <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 dark:text-gray-400 w-16">미니맵</span>
-                <div
-                  ref={minimapRef}
-                  onClick={handleMinimapClick}
-                  className="flex-1 h-6 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-600 relative cursor-pointer overflow-hidden"
-                >
+              <div
+                ref={minimapRef}
+                role="slider"
+                aria-label="타임라인 미니맵"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(viewportPosition.left)}
+                tabIndex={0}
+                onClick={handleMinimapClick}
+                onKeyDown={(e) => {
+                  const container = scrollContainerRef.current;
+                  if (!container) return;
+                  const step = container.clientWidth * 0.2;
+                  if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    container.scrollBy({ left: -step, behavior: 'smooth' });
+                  } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    container.scrollBy({ left: step, behavior: 'smooth' });
+                  }
+                }}
+                className="h-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 relative cursor-pointer overflow-hidden touch-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
                   {/* 시간 눈금 */}
                   {hourSlots.map((hour, idx) => (
                     <div
@@ -951,15 +1038,17 @@ export default function RoomReservation() {
                     />
                   )}
 
-                  {/* 뷰포트 인디케이터 */}
+                  {/* 뷰포트 인디케이터 - 드래그 가능 */}
                   <div
-                    className="absolute top-0 bottom-0 border-2 border-blue-600 bg-blue-100 bg-opacity-30 rounded-sm pointer-events-none"
+                    className={`absolute top-0 bottom-0 border-2 border-blue-600 bg-blue-100 bg-opacity-30 rounded-sm ${
+                      isMinimapDragging ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
                     style={{
                       left: `${viewportPosition.left}%`,
                       width: `${viewportPosition.width}%`,
                     }}
+                    onMouseDown={handleMinimapDragStart}
                   />
-                </div>
               </div>
             </div>
 
@@ -1033,67 +1122,74 @@ export default function RoomReservation() {
       {/* 컨텍스트 메뉴 */}
       {contextMenu && (
         <div
-          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[180px]"
+          role="menu"
+          aria-label="시간 슬롯 메뉴"
+          className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-[180px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* 메뉴 헤더 */}
-          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-            <div className="text-xs font-medium text-gray-700">{contextMenu.room.name}</div>
-            <div className="text-xs text-gray-500">{contextMenu.slot}</div>
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">{contextMenu.room.name}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{contextMenu.slot}</div>
           </div>
 
           {/* 예약 가능한 슬롯 */}
           {contextMenu.status === 'available' && (
             <>
               <button
+                role="menuitem"
                 onClick={() => handleSelectDuration(30)}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 30분 선택
               </button>
               <button
+                role="menuitem"
                 onClick={() => handleSelectDuration(60)}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 1시간 선택
               </button>
               <button
+                role="menuitem"
                 onClick={() => handleSelectDuration(120)}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 2시간 선택
               </button>
               <button
+                role="menuitem"
                 onClick={handleSelectToNextHour}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
                 정시까지 선택
               </button>
-              <div className="border-t border-gray-100 my-1" />
+              <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
               {selectedParticipants.length > 0 && optimalTimes.length > 0 && (
                 <div className="px-3 py-2">
-                  <div className="text-xs text-gray-500 mb-1">추천 시간:</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">추천 시간:</div>
                   {optimalTimes.slice(0, 3).map((time, idx) => (
                     <button
                       key={idx}
+                      role="menuitem"
                       onClick={() => {
                         applyOptimalTime(time.startTime, time.endTime, contextMenu.roomId);
                         closeContextMenu();
                       }}
-                      className="w-full px-2 py-1 text-xs text-left text-blue-600 hover:bg-blue-50 rounded"
+                      className="w-full px-2 py-1 text-xs text-left text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 rounded"
                     >
                       {time.startTime} - {time.endTime}
                     </button>
@@ -1107,25 +1203,27 @@ export default function RoomReservation() {
           {contextMenu.status === 'selected' && (
             <>
               <button
+                role="menuitem"
                 onClick={() => {
                   setShowModal(true);
                   closeContextMenu();
                 }}
-                className="w-full px-3 py-2 text-sm text-left text-blue-600 hover:bg-blue-50 flex items-center gap-2 font-medium"
+                className="w-full px-3 py-2 text-sm text-left text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center gap-2 font-medium"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 예약하기
               </button>
               <button
+                role="menuitem"
                 onClick={() => {
                   clearSelection();
                   closeContextMenu();
                 }}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 선택 해제
@@ -1136,24 +1234,25 @@ export default function RoomReservation() {
           {/* 예약된 슬롯 */}
           {contextMenu.status === 'reserved' && contextMenu.reservation && (
             <>
-              <div className="px-3 py-2 border-b border-gray-100">
-                <div className="text-sm font-medium text-gray-900">{contextMenu.reservation.title}</div>
-                <div className="text-xs text-gray-500 mt-0.5">
+              <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                <div className="text-sm font-medium text-gray-900 dark:text-white">{contextMenu.reservation.title}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {contextMenu.reservation.startTime} - {contextMenu.reservation.endTime}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
                   주관: {contextMenu.reservation.organizer}
                 </div>
               </div>
               <button
+                role="menuitem"
                 onClick={() => {
                   setViewingReservation(contextMenu.reservation);
                   setViewingRoom(contextMenu.room);
                   closeContextMenu();
                 }}
-                className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
@@ -1161,14 +1260,15 @@ export default function RoomReservation() {
               </button>
               {contextMenu.reservation.isMyReservation && (
                 <button
+                  role="menuitem"
                   onClick={() => {
                     // 내 예약 편집으로 이동
                     setShowMyReservations(true);
                     closeContextMenu();
                   }}
-                  className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  className="w-full px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
                 >
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                   내 예약 관리
@@ -1182,20 +1282,40 @@ export default function RoomReservation() {
       {/* 키보드 단축키 도움말 모달 */}
       {showShortcutHelp && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity"
           onClick={() => setShowShortcutHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shortcut-help-title"
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 transform transition-all"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') {
+                // 포커스 트랩: 모달 내부에서만 탭 이동
+                const focusable = e.currentTarget.querySelectorAll('button');
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                  e.preventDefault();
+                  last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                  e.preventDefault();
+                  first.focus();
+                }
+              }
+            }}
           >
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">키보드 단축키</h2>
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 id="shortcut-help-title" className="text-lg font-semibold text-gray-900 dark:text-white">키보드 단축키</h2>
               <button
                 onClick={() => setShowShortcutHelp(false)}
-                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="닫기"
+                autoFocus
               >
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -1205,17 +1325,17 @@ export default function RoomReservation() {
                 <ShortcutRow keys={['Esc']} description="모달 닫기 / 선택 해제" />
                 <ShortcutRow keys={['Enter']} description="예약하기 (시간 선택 시)" />
                 <ShortcutRow keys={['Delete']} description="선택 해제" />
-                <div className="border-t border-gray-100 my-3" />
+                <div className="border-t border-gray-100 dark:border-gray-700 my-3" />
                 <ShortcutRow keys={['←']} description="이전 날짜" />
                 <ShortcutRow keys={['→']} description="다음 날짜" />
                 <ShortcutRow keys={['T']} description="오늘로 이동" />
-                <div className="border-t border-gray-100 my-3" />
+                <div className="border-t border-gray-100 dark:border-gray-700 my-3" />
                 <ShortcutRow keys={['M']} description="내 예약 열기/닫기" />
                 <ShortcutRow keys={['?']} description="단축키 도움말" />
               </div>
             </div>
-            <div className="px-6 py-3 bg-gray-50 rounded-b-xl border-t border-gray-100">
-              <p className="text-xs text-gray-500 text-center">
+            <div className="px-6 py-3 bg-gray-50 dark:bg-gray-700 rounded-b-xl border-t border-gray-100 dark:border-gray-600">
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                 입력 필드에서는 단축키가 비활성화됩니다
               </p>
             </div>
@@ -1234,13 +1354,13 @@ function ShortcutRow({ keys, description }) {
         {keys.map((key, idx) => (
           <kbd
             key={idx}
-            className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm font-mono text-gray-700 min-w-[28px] text-center"
+            className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm font-mono text-gray-700 dark:text-gray-200 min-w-[28px] text-center"
           >
             {key}
           </kbd>
         ))}
       </div>
-      <span className="text-sm text-gray-600">{description}</span>
+      <span className="text-sm text-gray-600 dark:text-gray-300">{description}</span>
     </div>
   );
 }
