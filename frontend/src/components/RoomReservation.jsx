@@ -11,6 +11,8 @@ export default function RoomReservation() {
     buildings,
     floors,
     rooms,
+    filteredRooms,
+    amenities,
     timeSlots,
     reservations,
     myReservations,
@@ -23,6 +25,7 @@ export default function RoomReservation() {
     employeeSchedules,
     showAvailability,
     meetingDuration,
+    roomFilters,
     selectBuilding,
     toggleFloor,
     setSelectedDate,
@@ -30,6 +33,7 @@ export default function RoomReservation() {
     clearSelection,
     findOptimalTimes,
     moveReservation,
+    setRoomFilters,
   } = useReservation();
 
   const { isDark, toggleTheme } = useTheme();
@@ -391,7 +395,7 @@ export default function RoomReservation() {
       container.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);
     };
-  }, [rooms, selectedFloors]);
+  }, [filteredRooms, selectedFloors]);
 
   // 미니맵 클릭으로 스크롤
   const handleMinimapClick = (e) => {
@@ -909,6 +913,77 @@ export default function RoomReservation() {
             </button>
           )}
         </div>
+
+        {/* 회의실 필터 영역 */}
+        {selectedFloors.size > 0 && (
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            {/* 이름 검색 */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">검색:</label>
+              <input
+                type="text"
+                value={roomFilters.nameSearch}
+                onChange={(e) => setRoomFilters({ ...roomFilters, nameSearch: e.target.value })}
+                placeholder="회의실 이름"
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white w-32"
+              />
+            </div>
+
+            {/* 인원 필터 */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">인원:</label>
+              <select
+                value={roomFilters.minCapacity || ''}
+                onChange={(e) => setRoomFilters({ ...roomFilters, minCapacity: e.target.value ? parseInt(e.target.value) : null })}
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">전체</option>
+                <option value="4">4인 이상</option>
+                <option value="8">8인 이상</option>
+                <option value="20">20인 이상</option>
+              </select>
+            </div>
+
+            {/* 장비 필터 */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">장비:</label>
+              <div className="flex items-center gap-2">
+                {amenities.map(amenity => (
+                  <label key={amenity.id} className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={roomFilters.amenities.includes(amenity.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setRoomFilters({ ...roomFilters, amenities: [...roomFilters.amenities, amenity.id] });
+                        } else {
+                          setRoomFilters({ ...roomFilters, amenities: roomFilters.amenities.filter(a => a !== amenity.id) });
+                        }
+                      }}
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    />
+                    {amenity.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* 필터 결과 카운트 & 초기화 */}
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {filteredRooms.length}/{rooms.length}개 회의실
+              </span>
+              {(roomFilters.nameSearch || roomFilters.minCapacity || roomFilters.amenities.length > 0) && (
+                <button
+                  onClick={() => setRoomFilters({ nameSearch: '', minCapacity: null, amenities: [] })}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* 메인 컨텐츠 */}
@@ -933,10 +1008,20 @@ export default function RoomReservation() {
               <p className="text-sm mt-1">{selectedBuilding.name}의 회의실을 확인합니다</p>
             </div>
           </div>
-        ) : rooms.length === 0 ? (
+        ) : filteredRooms.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-gray-500 dark:text-gray-400">
-              <p className="text-lg font-medium">해당 층에 회의실이 없습니다</p>
+              <p className="text-lg font-medium">
+                {rooms.length === 0 ? '해당 층에 회의실이 없습니다' : '검색 조건에 맞는 회의실이 없습니다'}
+              </p>
+              {rooms.length > 0 && (
+                <button
+                  onClick={() => setRoomFilters({ nameSearch: '', minCapacity: null, amenities: [] })}
+                  className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  필터 초기화
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -965,7 +1050,7 @@ export default function RoomReservation() {
                 {/* 회의실 행 - 층별 그룹화 */}
                 {Array.from(selectedFloors).map(floorId => {
                   const floor = floors.find(f => f.id === floorId);
-                  const floorRooms = rooms.filter(r => r.floorId === floorId);
+                  const floorRooms = filteredRooms.filter(r => r.floorId === floorId);
                   if (floorRooms.length === 0) return null;
 
                   return (
@@ -1146,7 +1231,7 @@ export default function RoomReservation() {
                   ))}
 
                   {/* 모든 회의실의 예약 표시 */}
-                  {rooms.map((room, roomIdx) => (
+                  {filteredRooms.map((room, roomIdx) => (
                     <div key={room.id} className="absolute inset-0">
                       {Object.entries(reservations[room.id] || {}).map(([slot, res]) => {
                         const slotIdx = timeSlots.indexOf(slot);
@@ -1162,8 +1247,8 @@ export default function RoomReservation() {
                         }
                         const startPercent = (slotIdx / timeSlots.length) * 100;
                         const widthPercent = ((endIdx - slotIdx + 1) / timeSlots.length) * 100;
-                        const topPercent = (roomIdx / rooms.length) * 100;
-                        const heightPercent = 100 / rooms.length;
+                        const topPercent = (roomIdx / filteredRooms.length) * 100;
+                        const heightPercent = 100 / filteredRooms.length;
 
                         return (
                           <div
@@ -1182,14 +1267,14 @@ export default function RoomReservation() {
                   ))}
 
                   {/* 현재 선택 영역 */}
-                  {selectedSlotRange && selectedRoom && (
+                  {selectedSlotRange && selectedRoom && filteredRooms.findIndex(r => r.id === selectedRoom) >= 0 && (
                     <div
                       className="absolute bg-blue-500 opacity-80"
                       style={{
                         left: `${(selectedSlotRange.start / timeSlots.length) * 100}%`,
                         width: `${((selectedSlotRange.end - selectedSlotRange.start + 1) / timeSlots.length) * 100}%`,
-                        top: `${(rooms.findIndex(r => r.id === selectedRoom) / rooms.length) * 100}%`,
-                        height: `${100 / rooms.length}%`,
+                        top: `${(filteredRooms.findIndex(r => r.id === selectedRoom) / filteredRooms.length) * 100}%`,
+                        height: `${100 / filteredRooms.length}%`,
                       }}
                     />
                   )}
