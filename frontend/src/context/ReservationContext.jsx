@@ -148,39 +148,47 @@ const MOCK_FLOORS = {
   ],
 };
 
+// 편의시설 목록
+const AMENITIES = [
+  { id: 'projector', name: '프로젝터' },
+  { id: 'whiteboard', name: '화이트보드' },
+  { id: 'videoConference', name: '화상회의' },
+  { id: 'tv', name: 'TV' },
+];
+
 const MOCK_ROOMS = {
   floor_a_1: [
-    { id: 'room_a1_1', name: '회의실 A', capacity: 6, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층' },
-    { id: 'room_a1_2', name: '회의실 B', capacity: 8, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층' },
+    { id: 'room_a1_1', name: '회의실 A', capacity: 6, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층', amenities: ['projector', 'whiteboard'] },
+    { id: 'room_a1_2', name: '회의실 B', capacity: 8, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층', amenities: ['whiteboard', 'tv'] },
   ],
   floor_a_2: [
-    { id: 'room_a2_1', name: '대회의실', capacity: 20, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층' },
-    { id: 'room_a2_2', name: '소회의실 1', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층' },
-    { id: 'room_a2_3', name: '소회의실 2', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층' },
+    { id: 'room_a2_1', name: '대회의실', capacity: 20, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
+    { id: 'room_a2_2', name: '소회의실 1', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['whiteboard'] },
+    { id: 'room_a2_3', name: '소회의실 2', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['whiteboard'] },
   ],
   floor_a_3: [
-    { id: 'room_a3_1', name: '임원회의실', capacity: 12, floorId: 'floor_a_3', buildingId: 'building_a', buildingName: '본관', floorName: '3층' },
+    { id: 'room_a3_1', name: '임원회의실', capacity: 12, floorId: 'floor_a_3', buildingId: 'building_a', buildingName: '본관', floorName: '3층', amenities: ['projector', 'videoConference', 'tv'] },
   ],
   floor_b_1: [
-    { id: 'room_b1_1', name: '미팅룸 1', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층' },
-    { id: 'room_b1_2', name: '미팅룸 2', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층' },
+    { id: 'room_b1_1', name: '미팅룸 1', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층', amenities: ['whiteboard'] },
+    { id: 'room_b1_2', name: '미팅룸 2', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층', amenities: ['projector', 'whiteboard'] },
   ],
   floor_b_2: [
-    { id: 'room_b2_1', name: '세미나실', capacity: 30, floorId: 'floor_b_2', buildingId: 'building_b', buildingName: '별관', floorName: '2층' },
+    { id: 'room_b2_1', name: '세미나실', capacity: 30, floorId: 'floor_b_2', buildingId: 'building_b', buildingName: '별관', floorName: '2층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
   ],
   floor_c_1: [
-    { id: 'room_c1_1', name: '상담실 1', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층' },
-    { id: 'room_c1_2', name: '상담실 2', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층' },
+    { id: 'room_c1_1', name: '상담실 1', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층', amenities: [] },
+    { id: 'room_c1_2', name: '상담실 2', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층', amenities: [] },
   ],
   floor_c_2: [
-    { id: 'room_c2_1', name: '프로젝트룸 A', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층' },
-    { id: 'room_c2_2', name: '프로젝트룸 B', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층' },
+    { id: 'room_c2_1', name: '프로젝트룸 A', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층', amenities: ['projector', 'whiteboard', 'tv'] },
+    { id: 'room_c2_2', name: '프로젝트룸 B', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층', amenities: ['whiteboard', 'videoConference'] },
   ],
   floor_c_3: [
-    { id: 'room_c3_1', name: '교육장', capacity: 40, floorId: 'floor_c_3', buildingId: 'building_c', buildingName: '신관', floorName: '3층' },
+    { id: 'room_c3_1', name: '교육장', capacity: 40, floorId: 'floor_c_3', buildingId: 'building_c', buildingName: '신관', floorName: '3층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
   ],
   floor_c_4: [
-    { id: 'room_c4_1', name: '스튜디오', capacity: 10, floorId: 'floor_c_4', buildingId: 'building_c', buildingName: '신관', floorName: '4층' },
+    { id: 'room_c4_1', name: '스튜디오', capacity: 10, floorId: 'floor_c_4', buildingId: 'building_c', buildingName: '신관', floorName: '4층', amenities: ['projector', 'videoConference', 'tv'] },
   ],
 };
 
@@ -290,8 +298,15 @@ export function ReservationProvider({ children }) {
   const [optionalAttendees, setOptionalAttendees] = useState([]); // 선택 참석자
 
   const [selectedBuilding, setSelectedBuilding] = useState(null);
-  const [selectedFloor, setSelectedFloor] = useState(null);
+  const [selectedFloors, setSelectedFloors] = useState(new Set());
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // 회의실 필터 상태
+  const [roomFilters, setRoomFilters] = useState({
+    nameSearch: '',
+    minCapacity: null,
+    amenities: [],
+  });
   const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [reservations, setReservations] = useState(() => generateMockReservations());
@@ -301,6 +316,8 @@ export function ReservationProvider({ children }) {
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [showMyReservations, setShowMyReservations] = useState(false);
+  const [showAvailability, setShowAvailability] = useState(true);
+  const [meetingDuration, setMeetingDuration] = useState(60);
 
   // 검색/필터 상태
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
@@ -311,8 +328,33 @@ export function ReservationProvider({ children }) {
   const teams = MOCK_TEAMS;
   const myGroups = MOCK_MY_GROUPS;
   const buildings = MOCK_BUILDINGS;
+  const amenities = AMENITIES;
   const floors = selectedBuilding ? (MOCK_FLOORS[selectedBuilding.id] || []) : [];
-  const rooms = selectedFloor ? (MOCK_ROOMS[selectedFloor.id] || []) : [];
+
+  // 멀티플로어: 선택된 층들의 회의실 합치기
+  const rooms = useMemo(() => {
+    if (selectedFloors.size === 0) return [];
+    return Array.from(selectedFloors).flatMap(floorId => MOCK_ROOMS[floorId] || []);
+  }, [selectedFloors]);
+
+  // 필터링된 회의실 목록
+  const filteredRooms = useMemo(() => {
+    let result = rooms;
+    // 이름 검색
+    if (roomFilters.nameSearch) {
+      result = result.filter(r => r.name.toLowerCase().includes(roomFilters.nameSearch.toLowerCase()));
+    }
+    // 최소 수용인원
+    if (roomFilters.minCapacity) {
+      result = result.filter(r => r.capacity >= roomFilters.minCapacity);
+    }
+    // 편의시설 필터
+    if (roomFilters.amenities.length > 0) {
+      result = result.filter(r => roomFilters.amenities.every(a => r.amenities?.includes(a)));
+    }
+    return result;
+  }, [rooms, roomFilters]);
+
   const allRooms = ALL_ROOMS;
   const timeSlots = TIME_SLOTS;
   const recurrenceTypes = RECURRENCE_TYPES;
@@ -360,7 +402,7 @@ export function ReservationProvider({ children }) {
         if (prefs.floorId) {
           const floorList = MOCK_FLOORS[building.id] || [];
           const floor = floorList.find(f => f.id === prefs.floorId);
-          if (floor) setSelectedFloor(floor);
+          if (floor) setSelectedFloors(new Set([floor.id]));
         }
       }
     }
@@ -633,18 +675,41 @@ export function ReservationProvider({ children }) {
 
   const selectBuilding = useCallback((building) => {
     setSelectedBuilding(building);
-    setSelectedFloor(null);
+    setSelectedFloors(new Set());
     setSelectedRoom(null);
     setSelectedTimeSlots([]);
     if (building) savePreferences(building.id, null);
   }, []);
 
+  // 단일 층 선택 (하위 호환성)
   const selectFloor = useCallback((floor) => {
-    setSelectedFloor(floor);
+    if (floor) {
+      setSelectedFloors(new Set([floor.id]));
+      if (selectedBuilding) savePreferences(selectedBuilding.id, floor.id);
+    } else {
+      setSelectedFloors(new Set());
+    }
     setSelectedRoom(null);
     setSelectedTimeSlots([]);
-    if (floor && selectedBuilding) savePreferences(selectedBuilding.id, floor.id);
   }, [selectedBuilding]);
+
+  // 멀티 층 토글
+  const toggleFloor = useCallback((floor) => {
+    setSelectedFloors(prev => {
+      const next = new Set(prev);
+      if (next.has(floor.id)) {
+        next.delete(floor.id);
+      } else {
+        if (next.size >= 4) {
+          return prev; // 최대 4개
+        }
+        next.add(floor.id);
+      }
+      return next;
+    });
+    setSelectedRoom(null);
+    setSelectedTimeSlots([]);
+  }, []);
 
   const toggleTimeSlot = useCallback((roomId, timeSlot) => {
     if (reservations[roomId]?.[timeSlot]) return;
@@ -946,27 +1011,74 @@ export function ReservationProvider({ children }) {
     return { success: true };
   }, [myReservations, reservations, allRooms]);
 
-  // 참여자들의 공통 가능 시간 찾기 (정시 단위로 추천)
-  const findOptimalTimes = useCallback((participantIds, date, durationMinutes = 60) => {
-    if (participantIds.length === 0) return [];
+  // 참여자들의 공통 가능 시간 찾기 (점수 기반 추천)
+  const findOptimalTimes = useCallback((durationMinutes = 60) => {
+    // 필수 참석자 (주관자 + 필수)
+    const requiredList = [
+      ...(organizer ? [organizer] : []),
+      ...requiredAttendees,
+    ];
+    // 선택 참석자
+    const optionalList = [...optionalAttendees];
 
-    const busySlots = new Set();
+    if (requiredList.length === 0 && optionalList.length === 0) return [];
 
-    // 각 참여자의 바쁜 시간대 수집
-    participantIds.forEach(empId => {
+    // 각 참여자별 바쁜 시간대 계산
+    const getBusySlotsForPerson = (empId) => {
+      const busy = new Set();
       const schedule = employeeSchedules[empId] || [];
       schedule
-        .filter(s => s.date === date)
+        .filter(s => s.date === selectedDate)
         .forEach(s => {
           const startMin = timeToMinutes(s.startTime);
           const endMin = timeToMinutes(s.endTime);
           for (let t = startMin; t < endMin; t += 10) {
             const h = Math.floor(t / 60);
             const m = t % 60;
-            busySlots.add(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+            busy.add(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
           }
         });
+      return busy;
+    };
+
+    // 참여자별 바쁜 시간 캐싱
+    const busyByPerson = {};
+    [...requiredList, ...optionalList].forEach(p => {
+      busyByPerson[p.id] = getBusySlotsForPerson(p.id);
     });
+
+    // 시간대가 특정 참여자에게 가능한지 확인
+    const isAvailableFor = (personId, startIdx, slotsNeeded) => {
+      const busy = busyByPerson[personId];
+      for (let j = 0; j < slotsNeeded; j++) {
+        if (busy.has(TIME_SLOTS[startIdx + j])) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // 시간대에 예약 가능한 회의실 찾기
+    const getAvailableRooms = (startIdx, slotsNeeded) => {
+      const availableRooms = [];
+      // 선택된 층의 회의실만 확인
+      const roomsToCheck = rooms.length > 0 ? rooms : allRooms;
+
+      for (const room of roomsToCheck) {
+        let roomAvailable = true;
+        for (let j = 0; j < slotsNeeded; j++) {
+          const slot = TIME_SLOTS[startIdx + j];
+          if (reservations[room.id]?.[slot]) {
+            roomAvailable = false;
+            break;
+          }
+        }
+        if (roomAvailable) {
+          availableRooms.push(room);
+        }
+      }
+      return availableRooms;
+    };
 
     // 정시(00분) 시작 시간만 필터링
     const hourlySlotIndices = TIME_SLOTS
@@ -974,36 +1086,56 @@ export function ReservationProvider({ children }) {
       .filter(({ slot }) => slot.endsWith(':00'))
       .map(({ idx }) => idx);
 
-    // 연속된 빈 시간대 찾기 (정시 단위로만)
     const slotsNeeded = Math.ceil(durationMinutes / 10);
-    const availableRanges = [];
+    const candidates = [];
 
     for (const startIdx of hourlySlotIndices) {
-      // 범위를 벗어나면 스킵
       if (startIdx + slotsNeeded > TIME_SLOTS.length) continue;
 
-      let allFree = true;
-      for (let j = 0; j < slotsNeeded; j++) {
-        if (busySlots.has(TIME_SLOTS[startIdx + j])) {
-          allFree = false;
-          break;
-        }
-      }
-      if (allFree) {
-        const startTime = TIME_SLOTS[startIdx];
-        const endTime = addMinutes(TIME_SLOTS[startIdx + slotsNeeded - 1], 10);
-        // 업무 시간 내 (09:00 ~ 18:00) 우선
-        const startHour = parseInt(startTime.split(':')[0]);
-        const priority = startHour >= 9 && startHour < 18 ? 1 : 2;
-        availableRanges.push({ startTime, endTime, priority });
-      }
+      const startTime = TIME_SLOTS[startIdx];
+      const endTime = addMinutes(TIME_SLOTS[startIdx + slotsNeeded - 1], 10);
+
+      // 참석 가능/불가 분류
+      const availableRequired = requiredList.filter(p => isAvailableFor(p.id, startIdx, slotsNeeded));
+      const unavailableRequired = requiredList.filter(p => !isAvailableFor(p.id, startIdx, slotsNeeded));
+      const availableOptional = optionalList.filter(p => isAvailableFor(p.id, startIdx, slotsNeeded));
+      const unavailableOptional = optionalList.filter(p => !isAvailableFor(p.id, startIdx, slotsNeeded));
+
+      // 예약 가능한 회의실
+      const availableRooms = getAvailableRooms(startIdx, slotsNeeded);
+
+      // 회의실이 없으면 스킵
+      if (availableRooms.length === 0) continue;
+
+      // 점수 계산: 필수 참석자 수 * 1000 + 선택 참석자 수
+      const requiredScore = availableRequired.length;
+      const optionalScore = availableOptional.length;
+      const totalScore = requiredScore * 1000 + optionalScore;
+
+      // 업무 시간 보너스 (09:00~18:00)
+      const startHour = parseInt(startTime.split(':')[0]);
+      const workHourBonus = (startHour >= 9 && startHour < 18) ? 10000 : 0;
+
+      candidates.push({
+        startTime,
+        endTime,
+        requiredScore,
+        optionalScore,
+        totalScore: totalScore + workHourBonus,
+        availableRequired,
+        unavailableRequired,
+        availableOptional,
+        unavailableOptional,
+        availableRooms,
+        isAllRequiredAvailable: unavailableRequired.length === 0,
+      });
     }
 
-    // 우선순위 정렬 후 상위 5개 반환
-    return availableRanges
-      .sort((a, b) => a.priority - b.priority || a.startTime.localeCompare(b.startTime))
-      .slice(0, 5);
-  }, [employeeSchedules]);
+    // 점수순 정렬 후 상위 10개 반환
+    return candidates
+      .sort((a, b) => b.totalScore - a.totalScore || a.startTime.localeCompare(b.startTime))
+      .slice(0, 10);
+  }, [employeeSchedules, organizer, requiredAttendees, optionalAttendees, selectedDate, rooms, allRooms, reservations]);
 
   // LLM 제어용 함수들
   const setParticipantsByNames = useCallback((names, type = ATTENDEE_TYPES.REQUIRED) => {
@@ -1093,6 +1225,13 @@ export function ReservationProvider({ children }) {
     }));
   }, [employees, employeeSchedules]);
 
+  // 첫 번째 선택된 층 (하위 호환성)
+  const selectedFloor = useMemo(() => {
+    if (selectedFloors.size === 0) return null;
+    const firstFloorId = Array.from(selectedFloors)[0];
+    return floors.find(f => f.id === firstFloorId) || null;
+  }, [selectedFloors, floors]);
+
   const value = {
     // 데이터
     employees,
@@ -1101,8 +1240,10 @@ export function ReservationProvider({ children }) {
     teams,
     myGroups,
     buildings,
+    amenities,
     floors,
     rooms,
+    filteredRooms,
     allRooms,
     timeSlots,
     reservations,
@@ -1119,7 +1260,8 @@ export function ReservationProvider({ children }) {
     requiredAttendees,
     optionalAttendees,
     selectedBuilding,
-    selectedFloor,
+    selectedFloor, // 하위 호환
+    selectedFloors, // 멀티 플로어
     selectedDate,
     selectedTimeSlots,
     selectedRoom,
@@ -1127,8 +1269,11 @@ export function ReservationProvider({ children }) {
     recurrence,
     recurrenceEndDate,
     showMyReservations,
+    showAvailability,
+    meetingDuration,
     employeeSearchQuery,
     selectedTeamFilter,
+    roomFilters,
 
     // 참석자 관리
     addAttendee,
@@ -1145,6 +1290,7 @@ export function ReservationProvider({ children }) {
     // 액션
     selectBuilding,
     selectFloor,
+    toggleFloor,
     setSelectedDate,
     toggleTimeSlot,
     selectTimeRange,
@@ -1153,8 +1299,11 @@ export function ReservationProvider({ children }) {
     setRecurrence,
     setRecurrenceEndDate,
     setShowMyReservations,
+    setShowAvailability,
+    setMeetingDuration,
     setEmployeeSearchQuery,
     setSelectedTeamFilter,
+    setRoomFilters,
     createReservation,
     deleteReservation,
     updateReservation,
