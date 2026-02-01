@@ -6,6 +6,14 @@ Meeting Scheduler AI의 기술 레퍼런스 문서입니다.
 
 <div class="grid cards" markdown>
 
+-   :material-robot:{ .lg .middle } **LLM Function Calling**
+
+    ---
+
+    AI 어시스턴트가 시스템을 제어하기 위한 함수 API
+
+    [:octicons-arrow-right-24: LLM Functions](llm-functions.md)
+
 -   :material-database:{ .lg .middle } **데이터 모델**
 
     ---
