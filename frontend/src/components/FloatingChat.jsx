@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useReservation } from '../context/ReservationContext';
 import TypingIndicator from './TypingIndicator';
+import { parseUserIntent, executeFunctions, formatFunctionResults } from '../services/functionCalling';
 
 const STORAGE_KEY = 'floating_chat_position';
 
@@ -116,6 +117,13 @@ export default function FloatingChat() {
 
   // 액션 추출 헬퍼 데이터
   const entityData = useMemo(() => ({
+    buildings: reservation.buildings,
+    employees: reservation.employees,
+    allRooms: reservation.allRooms,
+  }), [reservation.buildings, reservation.employees, reservation.allRooms]);
+
+  // Function Calling 컨텍스트
+  const functionContext = useMemo(() => ({
     buildings: reservation.buildings,
     employees: reservation.employees,
     allRooms: reservation.allRooms,
@@ -258,31 +266,65 @@ export default function FloatingChat() {
     const message = inputValue.trim();
     setInputValue('');
 
-    // 컨텍스트 정보 구성 (현재 UI 상태)
-    const contextInfo = [];
-    if (reservation.selectedParticipants.length > 0) {
-      contextInfo.push(`참여자: ${reservation.selectedParticipants.map(p => p.name).join(', ')}`);
-    }
-    if (reservation.selectedBuilding) {
-      contextInfo.push(`건물: ${reservation.selectedBuilding.name}`);
-    }
-    if (reservation.selectedFloor) {
-      contextInfo.push(`층: ${reservation.selectedFloor.name}`);
-    }
-    if (reservation.selectedRoom) {
-      const room = reservation.allRooms.find(r => r.id === reservation.selectedRoom);
-      if (room) contextInfo.push(`회의실: ${room.name}`);
-    }
-    if (reservation.selectedTimeSlots.length > 0) {
-      const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
-      contextInfo.push(`선택 시간: ${slots[0]} ~ ${addMinutes(slots[slots.length - 1], 10)}`);
-    }
+    // 사용자 메시지 추가
+    const userMessage = {
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, userMessage]);
 
-    const fullMessage = contextInfo.length > 0
-      ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
-      : message;
+    // Function Calling 의도 파싱
+    const functionCalls = parseUserIntent(message, functionContext);
 
-    await sendMessage(fullMessage);
+    if (functionCalls.length > 0) {
+      // 함수 실행
+      const results = await executeFunctions(functionCalls, reservation);
+      const responseText = formatFunctionResults(results);
+
+      // 추가 데이터 추출 (최적 시간, 회의실 목록 등)
+      const optimalTimes = results.find(r => r.optimalTimes)?.optimalTimes;
+      const availableRooms = results.find(r => r.rooms)?.rooms;
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: responseText || '요청을 처리했습니다.',
+        timestamp: new Date().toISOString(),
+        optimalTimes,
+        availableRooms,
+        functionResults: results,
+      };
+      setLocalMessages(prev => [...prev, assistantMessage]);
+    } else {
+      // 백엔드 API 호출 (Function Call이 감지되지 않은 경우)
+      // 컨텍스트 정보 구성 (현재 UI 상태)
+      const contextInfo = [];
+      if (reservation.selectedParticipants.length > 0) {
+        contextInfo.push(`참여자: ${reservation.selectedParticipants.map(p => p.name).join(', ')}`);
+      }
+      if (reservation.selectedBuilding) {
+        contextInfo.push(`건물: ${reservation.selectedBuilding.name}`);
+      }
+      if (reservation.selectedFloor) {
+        contextInfo.push(`층: ${reservation.selectedFloor.name}`);
+      }
+      if (reservation.selectedRoom) {
+        const room = reservation.allRooms.find(r => r.id === reservation.selectedRoom);
+        if (room) contextInfo.push(`회의실: ${room.name}`);
+      }
+      if (reservation.selectedTimeSlots.length > 0) {
+        const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
+        contextInfo.push(`선택 시간: ${slots[0]} ~ ${addMinutes(slots[slots.length - 1], 10)}`);
+      }
+
+      const fullMessage = contextInfo.length > 0
+        ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
+        : message;
+
+      // 로컬 메시지 제거하고 API 메시지 사용
+      setLocalMessages(prev => prev.filter(m => m !== userMessage));
+      await sendMessage(fullMessage);
+    }
   };
 
   // 시간 더하기 헬퍼
@@ -471,9 +513,12 @@ export default function FloatingChat() {
               </svg>
             </div>
             <p className="text-gray-600 dark:text-gray-300 font-medium mb-2">무엇을 도와드릴까요?</p>
-            <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">
-              예: "김철수, 이영희와 내일 오후 2시에 본관 2층 대회의실 예약해줘"
-            </p>
+            <div className="text-gray-400 dark:text-gray-500 text-xs mb-4 space-y-1 text-left">
+              <p>"김철수, 이영희 참석자로 추가해줘"</p>
+              <p>"내일 오후 2시~3시 가능한 회의실 찾아줘"</p>
+              <p>"최적 시간 추천해줘"</p>
+              <p>"내 예약 목록 보여줘"</p>
+            </div>
             {reservation.selectedParticipants.length > 0 && (
               <button
                 onClick={handleFindOptimalTimes}
@@ -508,19 +553,47 @@ export default function FloatingChat() {
                       <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">시간 선택:</p>
                         <div className="flex flex-wrap gap-1">
-                          {msg.optimalTimes.map((time, timeIdx) => (
+                          {msg.optimalTimes.slice(0, 5).map((time, timeIdx) => (
                             <button
                               key={timeIdx}
                               onClick={() => {
-                                if (reservation.selectedRoom) {
+                                // 회의실이 있으면 첫 번째 가용 회의실 선택
+                                if (time.availableRooms && time.availableRooms.length > 0) {
+                                  const room = time.availableRooms[0];
+                                  reservation.setRoomByName(room.name);
+                                  setTimeout(() => {
+                                    reservation.setTimeByRange(time.startTime, time.endTime, room.id);
+                                  }, 100);
+                                } else if (reservation.selectedRoom) {
                                   reservation.setTimeByRange(time.startTime, time.endTime);
                                 } else {
                                   alert('먼저 회의실을 선택해주세요.');
                                 }
                               }}
-                              className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                              className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                                time.isAllRequiredAvailable
+                                  ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800'
+                                  : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-800'
+                              }`}
                             >
-                              {time.startTime} ~ {time.endTime}
+                              {time.startTime}~{time.endTime}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* 가용 회의실 선택 버튼 */}
+                    {msg.availableRooms && msg.availableRooms.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">회의실 선택:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {msg.availableRooms.slice(0, 6).map((room, roomIdx) => (
+                            <button
+                              key={roomIdx}
+                              onClick={() => reservation.setRoomByName(room.name)}
+                              className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                            >
+                              {room.name} ({room.capacity}인)
                             </button>
                           ))}
                         </div>
