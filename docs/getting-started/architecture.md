@@ -94,7 +94,32 @@ sequenceDiagram
     F-->>U: 예약 완료 표시
 ```
 
-### AI 채팅 흐름
+### AI 채팅 흐름 (프론트엔드 Function Calling)
+
+프론트엔드에서 직접 사용자 의도를 파싱하고 함수를 실행하는 방식입니다.
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant F as 프론트엔드
+    participant FC as Function Calling
+    participant CTX as ReservationContext
+
+    U->>F: "김철수와 내일 2시 회의 잡아줘"
+    F->>FC: parseUserIntent(message)
+    FC-->>F: [setParticipantsByNames, setDateByString, setTimeByRange]
+
+    loop Function Execution
+        F->>CTX: 함수 실행
+        CTX-->>F: 결과 반환
+    end
+
+    F-->>U: 결과 메시지 + 빠른 적용 버튼
+```
+
+### AI 채팅 흐름 (백엔드 LLM Agent)
+
+백엔드 LLM이 의도를 분석하고 도구를 호출하는 방식입니다.
 
 ```mermaid
 sequenceDiagram
