@@ -1217,6 +1217,284 @@ export function ReservationProvider({ children }) {
     return false;
   }, [selectedRoom, reservations]);
 
+  // 주관자 설정 (이름으로)
+  const setOrganizerByName = useCallback((name) => {
+    const employee = employees.find(e =>
+      e.name.includes(name) || name.includes(e.name)
+    );
+    if (employee) {
+      // 기존 주관자가 있으면 필수 참석자로 변경
+      if (organizer) {
+        setRequiredAttendees(prev => [...prev.filter(a => a.id !== organizer.id), organizer]);
+      }
+      // 새 주관자가 이미 참석자 목록에 있으면 제거
+      setRequiredAttendees(prev => prev.filter(a => a.id !== employee.id));
+      setOptionalAttendees(prev => prev.filter(a => a.id !== employee.id));
+      setOrganizer(employee);
+      return employee;
+    }
+    return null;
+  }, [employees, organizer]);
+
+  // 날짜 설정 (문자열 파싱)
+  const setDateByString = useCallback((dateStr) => {
+    const today = new Date();
+    let targetDate = null;
+
+    // 상대적 날짜 처리
+    const lowerStr = dateStr.toLowerCase().trim();
+    if (lowerStr === '오늘' || lowerStr === 'today') {
+      targetDate = today;
+    } else if (lowerStr === '내일' || lowerStr === 'tomorrow') {
+      targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + 1);
+    } else if (lowerStr === '모레') {
+      targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + 2);
+    } else if (lowerStr.includes('다음 주') || lowerStr.includes('next week')) {
+      targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + 7);
+    } else if (lowerStr.includes('월요일') || lowerStr.includes('monday')) {
+      targetDate = new Date(today);
+      const dayOfWeek = targetDate.getDay();
+      const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 7 : 8 - dayOfWeek);
+      targetDate.setDate(targetDate.getDate() + daysUntilMonday);
+    } else if (lowerStr.includes('화요일') || lowerStr.includes('tuesday')) {
+      targetDate = new Date(today);
+      const dayOfWeek = targetDate.getDay();
+      const daysUntil = ((2 - dayOfWeek + 7) % 7) || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntil);
+    } else if (lowerStr.includes('수요일') || lowerStr.includes('wednesday')) {
+      targetDate = new Date(today);
+      const dayOfWeek = targetDate.getDay();
+      const daysUntil = ((3 - dayOfWeek + 7) % 7) || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntil);
+    } else if (lowerStr.includes('목요일') || lowerStr.includes('thursday')) {
+      targetDate = new Date(today);
+      const dayOfWeek = targetDate.getDay();
+      const daysUntil = ((4 - dayOfWeek + 7) % 7) || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntil);
+    } else if (lowerStr.includes('금요일') || lowerStr.includes('friday')) {
+      targetDate = new Date(today);
+      const dayOfWeek = targetDate.getDay();
+      const daysUntil = ((5 - dayOfWeek + 7) % 7) || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntil);
+    } else {
+      // YYYY-MM-DD 형식 시도
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = parsed;
+      }
+    }
+
+    if (targetDate) {
+      const formatted = targetDate.toISOString().split('T')[0];
+      setSelectedDate(formatted);
+      return formatted;
+    }
+    return null;
+  }, []);
+
+  // 예약 가능 회의실 조회
+  const getAvailableRooms = useCallback((startTime, endTime, date = selectedDate) => {
+    const startIdx = TIME_SLOTS.indexOf(startTime);
+    const endIdx = TIME_SLOTS.findIndex(s => s >= endTime);
+    if (startIdx === -1 || endIdx === -1) return [];
+
+    const slotsToCheck = TIME_SLOTS.slice(startIdx, endIdx);
+    const roomsToCheck = rooms.length > 0 ? rooms : allRooms;
+
+    return roomsToCheck.filter(room => {
+      return slotsToCheck.every(slot => !reservations[room.id]?.[slot]);
+    }).map(room => ({
+      id: room.id,
+      name: room.name,
+      capacity: room.capacity,
+      floor: room.floorId,
+      amenities: room.amenities || [],
+    }));
+  }, [selectedDate, rooms, allRooms, reservations]);
+
+  // 임직원 검색
+  const searchEmployees = useCallback((query) => {
+    if (!query || query.length < 1) return [];
+    const lowerQuery = query.toLowerCase();
+    return employees.filter(e =>
+      e.name.toLowerCase().includes(lowerQuery) ||
+      e.department?.toLowerCase().includes(lowerQuery) ||
+      e.position?.toLowerCase().includes(lowerQuery) ||
+      e.email?.toLowerCase().includes(lowerQuery)
+    ).slice(0, 20).map(e => ({
+      id: e.id,
+      name: e.name,
+      department: e.department,
+      position: e.position,
+      email: e.email,
+    }));
+  }, [employees]);
+
+  // 간편 예약 생성 (이름 기반)
+  const createQuickReservation = useCallback(async ({
+    title,
+    organizerName,
+    requiredNames = [],
+    optionalNames = [],
+    roomName,
+    date,
+    startTime,
+    endTime,
+    recurrenceType,
+    recurrenceEnd,
+  }) => {
+    // 1. 날짜 설정
+    if (date) {
+      const parsedDate = setDateByString(date);
+      if (!parsedDate) return { success: false, error: '날짜 파싱 실패' };
+    }
+
+    // 2. 참석자 설정
+    if (organizerName) {
+      const org = setOrganizerByName(organizerName);
+      if (!org) return { success: false, error: `주관자 "${organizerName}" 찾을 수 없음` };
+    }
+    if (requiredNames.length > 0) {
+      setParticipantsByNames(requiredNames, ATTENDEE_TYPES.REQUIRED);
+    }
+    if (optionalNames.length > 0) {
+      setParticipantsByNames(optionalNames, ATTENDEE_TYPES.OPTIONAL);
+    }
+
+    // 3. 회의실 설정
+    let targetRoom = null;
+    if (roomName) {
+      targetRoom = setRoomByName(roomName);
+      if (!targetRoom) return { success: false, error: `회의실 "${roomName}" 찾을 수 없음` };
+    }
+
+    // 4. 시간 설정
+    if (startTime && endTime && targetRoom) {
+      const timeSet = setTimeByRange(startTime, endTime, targetRoom.id);
+      if (!timeSet) return { success: false, error: '해당 시간은 이미 예약됨' };
+    }
+
+    // 5. 반복 설정
+    if (recurrenceType) {
+      setRecurrence(recurrenceType);
+      if (recurrenceEnd) {
+        setRecurrenceEndDate(recurrenceEnd);
+      }
+    }
+
+    // 6. 제목 설정
+    if (title) {
+      setMeetingTitle(title);
+    }
+
+    // 7. 예약 생성
+    const result = await createReservation();
+    return result;
+  }, [setDateByString, setOrganizerByName, setParticipantsByNames, setRoomByName, setTimeByRange, setRecurrence, setRecurrenceEndDate, setMeetingTitle, createReservation]);
+
+  // 내 예약 조회
+  const getMyReservationList = useCallback((date = null) => {
+    let list = myReservations;
+    if (date) {
+      list = list.filter(r => r.date === date);
+    }
+    return list.map(r => ({
+      id: r.id,
+      title: r.title,
+      date: r.date,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      roomId: r.roomId,
+      roomName: allRooms.find(room => room.id === r.roomId)?.name || r.roomId,
+      participants: r.participants?.length || 0,
+      isRecurring: !!r.recurrenceGroupId,
+    }));
+  }, [myReservations, allRooms]);
+
+  // 시간/회의실로 예약 취소
+  const cancelReservationByTime = useCallback((roomName, startTime, date = selectedDate) => {
+    const room = allRooms.find(r =>
+      r.name.includes(roomName) || roomName.includes(r.name)
+    );
+    if (!room) return { success: false, error: `회의실 "${roomName}" 찾을 수 없음` };
+
+    const reservation = myReservations.find(r =>
+      r.roomId === room.id &&
+      r.date === date &&
+      r.startTime === startTime
+    );
+    if (!reservation) return { success: false, error: '해당 예약을 찾을 수 없음' };
+
+    deleteReservation(reservation.id);
+    return { success: true, deletedReservation: reservation };
+  }, [allRooms, myReservations, selectedDate, deleteReservation]);
+
+  // 현재 상태 요약
+  const getCurrentState = useCallback(() => {
+    return {
+      // 참석자
+      organizer: organizer ? { id: organizer.id, name: organizer.name } : null,
+      requiredAttendees: requiredAttendees.map(a => ({ id: a.id, name: a.name })),
+      optionalAttendees: optionalAttendees.map(a => ({ id: a.id, name: a.name })),
+      totalParticipants: selectedParticipants.length,
+
+      // 장소
+      building: selectedBuilding ? { id: selectedBuilding.id, name: selectedBuilding.name } : null,
+      floors: Array.from(selectedFloors),
+      room: selectedRoom ? {
+        id: selectedRoom,
+        name: allRooms.find(r => r.id === selectedRoom)?.name,
+      } : null,
+
+      // 시간
+      date: selectedDate,
+      timeSlots: selectedTimeSlots.length > 0 ? {
+        start: selectedTimeSlots[0]?.timeSlot,
+        end: selectedTimeSlots[selectedTimeSlots.length - 1]?.timeSlot,
+        count: selectedTimeSlots.length,
+        durationMinutes: selectedTimeSlots.length * 10,
+      } : null,
+
+      // 회의 정보
+      title: meetingTitle,
+      recurrence: recurrence,
+      recurrenceEndDate: recurrenceEndDate,
+
+      // 추천
+      optimalTimesCount: findOptimalTimes(meetingDuration).length,
+    };
+  }, [organizer, requiredAttendees, optionalAttendees, selectedParticipants, selectedBuilding, selectedFloors, selectedRoom, allRooms, selectedDate, selectedTimeSlots, meetingTitle, recurrence, recurrenceEndDate, findOptimalTimes, meetingDuration]);
+
+  // 반복 일정 설정 (문자열)
+  const setRecurrenceByString = useCallback((typeStr, endDateStr = null) => {
+    const lowerType = typeStr.toLowerCase();
+    let recurrenceType = RECURRENCE_TYPES.NONE;
+
+    if (lowerType.includes('매일') || lowerType.includes('daily')) {
+      recurrenceType = RECURRENCE_TYPES.DAILY;
+    } else if (lowerType.includes('매주') || lowerType.includes('weekly')) {
+      recurrenceType = RECURRENCE_TYPES.WEEKLY;
+    } else if (lowerType.includes('격주') || lowerType.includes('biweekly')) {
+      recurrenceType = RECURRENCE_TYPES.BIWEEKLY;
+    } else if (lowerType.includes('매월') || lowerType.includes('monthly')) {
+      recurrenceType = RECURRENCE_TYPES.MONTHLY;
+    }
+
+    setRecurrence(recurrenceType);
+
+    if (endDateStr) {
+      const endDate = setDateByString(endDateStr);
+      if (endDate) {
+        setRecurrenceEndDate(endDate);
+      }
+    }
+
+    return recurrenceType;
+  }, [setDateByString]);
+
   // 참여자 일정 조회
   const getParticipantSchedules = useCallback((participantIds, date) => {
     return participantIds.map(id => ({
@@ -1319,6 +1597,15 @@ export function ReservationProvider({ children }) {
     setFloorByName,
     setRoomByName,
     setTimeByRange,
+    setOrganizerByName,
+    setDateByString,
+    getAvailableRooms,
+    searchEmployees,
+    createQuickReservation,
+    getMyReservationList,
+    cancelReservationByTime,
+    getCurrentState,
+    setRecurrenceByString,
   };
 
   return (
