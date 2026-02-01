@@ -860,6 +860,92 @@ export function ReservationProvider({ children }) {
     });
   }, [myReservations]);
 
+  // 예약 이동 (시간/회의실 변경)
+  const moveReservation = useCallback(async (reservationId, newRoomId, newStartTime, newEndTime) => {
+    const reservation = myReservations.find(r => r.id === reservationId);
+    if (!reservation) {
+      return { success: false, error: '예약을 찾을 수 없습니다.' };
+    }
+
+    // 기존 예약 슬롯 계산
+    const oldStartIdx = TIME_SLOTS.indexOf(reservation.startTime);
+    const oldEndIdx = TIME_SLOTS.findIndex(s => s === reservation.endTime) - 1 || oldStartIdx;
+
+    // 새 예약 슬롯 계산
+    const newStartIdx = TIME_SLOTS.indexOf(newStartTime);
+    let newEndIdx = TIME_SLOTS.findIndex(s => s === newEndTime);
+    if (newEndIdx < 0) {
+      // endTime이 정확히 슬롯에 없으면 계산
+      const [eh, em] = newEndTime.split(':').map(Number);
+      const endMinutes = eh * 60 + em;
+      newEndIdx = TIME_SLOTS.findIndex(s => {
+        const [sh, sm] = s.split(':').map(Number);
+        return sh * 60 + sm >= endMinutes;
+      }) - 1;
+    }
+    if (newEndIdx < newStartIdx) newEndIdx = newStartIdx;
+
+    // 새 endTime 계산 (슬롯 + 10분)
+    const lastSlot = TIME_SLOTS[newEndIdx];
+    const [lh, lm] = lastSlot.split(':').map(Number);
+    const endMinutes = lh * 60 + lm + 10;
+    const endH = Math.floor(endMinutes / 60);
+    const endM = endMinutes % 60;
+    const calculatedEndTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+
+    // 충돌 체크 (자기 자신 제외)
+    for (let i = newStartIdx; i <= newEndIdx; i++) {
+      const slot = TIME_SLOTS[i];
+      const existing = reservations[newRoomId]?.[slot];
+      if (existing && existing.id !== reservationId) {
+        return { success: false, error: '해당 시간에 다른 예약이 있습니다.' };
+      }
+    }
+
+    // 예약 업데이트
+    const room = allRooms.find(r => r.id === newRoomId);
+    const updatedReservation = {
+      ...reservation,
+      roomId: newRoomId,
+      roomName: room?.name || reservation.roomName,
+      startTime: newStartTime,
+      endTime: calculatedEndTime,
+    };
+
+    // myReservations 업데이트
+    setMyReservations(prev =>
+      prev.map(r => r.id === reservationId ? updatedReservation : r)
+    );
+
+    // reservations 업데이트 (기존 슬롯 삭제 후 새 슬롯에 추가)
+    setReservations(prev => {
+      const updated = { ...prev };
+
+      // 기존 슬롯에서 삭제
+      if (updated[reservation.roomId]) {
+        Object.keys(updated[reservation.roomId]).forEach(slot => {
+          if (updated[reservation.roomId][slot]?.id === reservationId) {
+            delete updated[reservation.roomId][slot];
+          }
+        });
+      }
+
+      // 새 슬롯에 추가
+      if (!updated[newRoomId]) updated[newRoomId] = {};
+      for (let i = newStartIdx; i <= newEndIdx; i++) {
+        const slot = TIME_SLOTS[i];
+        updated[newRoomId][slot] = {
+          ...updatedReservation,
+          isMyReservation: true,
+        };
+      }
+
+      return updated;
+    });
+
+    return { success: true };
+  }, [myReservations, reservations, allRooms]);
+
   // 참여자들의 공통 가능 시간 찾기 (정시 단위로 추천)
   const findOptimalTimes = useCallback((participantIds, date, durationMinutes = 60) => {
     if (participantIds.length === 0) return [];
@@ -1072,6 +1158,7 @@ export function ReservationProvider({ children }) {
     createReservation,
     deleteReservation,
     updateReservation,
+    moveReservation,
 
     // 분석/추천
     findOptimalTimes,

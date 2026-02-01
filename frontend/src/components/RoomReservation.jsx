@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useReservation } from '../context/ReservationContext';
+import { useTheme } from '../context/ThemeContext';
+import { useToast } from './Toast';
 import ReservationModal from './ReservationModal';
 import ReservationDetailModal from './ReservationDetailModal';
 import MyReservations from './MyReservations';
@@ -25,7 +27,11 @@ export default function RoomReservation() {
     selectTimeRange,
     clearSelection,
     findOptimalTimes,
+    moveReservation,
   } = useReservation();
+
+  const { isDark, toggleTheme } = useTheme();
+  const toast = useToast();
 
   const [showModal, setShowModal] = useState(false);
   const [showMyReservations, setShowMyReservations] = useState(false);
@@ -46,6 +52,10 @@ export default function RoomReservation() {
   // 리사이즈 드래그 상태
   const [isResizing, setIsResizing] = useState(false);
   const [resizeEdge, setResizeEdge] = useState(null); // 'start' | 'end'
+
+  // 예약 이동 드래그 상태
+  const [movingReservation, setMovingReservation] = useState(null); // { reservation, roomId, startSlotIndex }
+  const [moveTargetSlot, setMoveTargetSlot] = useState(null); // { roomId, slotIndex }
 
   // 미니맵 상태
   const [viewportPosition, setViewportPosition] = useState({ left: 0, width: 100 });
@@ -452,6 +462,110 @@ export default function RoomReservation() {
     return null;
   };
 
+  // 예약 이동 시작 (내 예약만)
+  const handleReservationDragStart = (reservation, roomId, slotIndex, e) => {
+    if (!reservation.isMyReservation) return;
+    e.stopPropagation();
+
+    // 예약의 슬롯 개수 계산
+    const startIdx = timeSlots.indexOf(reservation.startTime);
+    const endTime = reservation.endTime;
+    let endIdx = timeSlots.findIndex(s => s === endTime);
+    if (endIdx < 0) {
+      // endTime이 슬롯에 없으면 계산
+      const [eh, em] = endTime.split(':').map(Number);
+      const endMinutes = eh * 60 + em;
+      endIdx = timeSlots.findIndex(s => {
+        const [sh, sm] = s.split(':').map(Number);
+        return sh * 60 + sm >= endMinutes;
+      }) - 1;
+    }
+    const slotCount = endIdx - startIdx;
+
+    setMovingReservation({
+      reservation,
+      roomId,
+      startSlotIndex: slotIndex,
+      slotCount,
+    });
+    setMoveTargetSlot({ roomId, slotIndex });
+  };
+
+  // 예약 이동 중
+  const handleReservationDragMove = useCallback((roomId, slotIndex) => {
+    if (!movingReservation) return;
+    setMoveTargetSlot({ roomId, slotIndex });
+  }, [movingReservation]);
+
+  // 예약 이동 완료
+  const handleReservationDragEnd = useCallback(async () => {
+    if (!movingReservation || !moveTargetSlot) {
+      setMovingReservation(null);
+      setMoveTargetSlot(null);
+      return;
+    }
+
+    const { reservation, slotCount } = movingReservation;
+    const { roomId: targetRoomId, slotIndex: targetSlotIndex } = moveTargetSlot;
+
+    // 같은 위치면 무시
+    const originalStartIdx = timeSlots.indexOf(reservation.startTime);
+    if (targetRoomId === movingReservation.roomId && targetSlotIndex === originalStartIdx) {
+      setMovingReservation(null);
+      setMoveTargetSlot(null);
+      return;
+    }
+
+    // 새 시간 계산
+    const newStartTime = timeSlots[targetSlotIndex];
+    const newEndIdx = Math.min(targetSlotIndex + slotCount, timeSlots.length - 1);
+    const newEndTime = timeSlots[newEndIdx] || timeSlots[timeSlots.length - 1];
+
+    // 충돌 체크
+    for (let i = targetSlotIndex; i <= newEndIdx; i++) {
+      const slot = timeSlots[i];
+      const existing = reservations[targetRoomId]?.[slot];
+      if (existing && existing.id !== reservation.id) {
+        toast.error('해당 시간에 다른 예약이 있습니다.');
+        setMovingReservation(null);
+        setMoveTargetSlot(null);
+        return;
+      }
+    }
+
+    // 예약 이동
+    if (moveReservation) {
+      const result = await moveReservation(reservation.id, targetRoomId, newStartTime, newEndTime);
+      if (result.success) {
+        toast.success('예약이 이동되었습니다.');
+      } else {
+        toast.error(result.error || '예약 이동에 실패했습니다.');
+      }
+    }
+
+    setMovingReservation(null);
+    setMoveTargetSlot(null);
+  }, [movingReservation, moveTargetSlot, timeSlots, reservations, moveReservation, toast]);
+
+  // 예약 이동 취소 (마우스 업)
+  useEffect(() => {
+    if (movingReservation) {
+      window.addEventListener('mouseup', handleReservationDragEnd);
+      return () => window.removeEventListener('mouseup', handleReservationDragEnd);
+    }
+  }, [movingReservation, handleReservationDragEnd]);
+
+  // 이동 미리보기 범위 계산
+  const getMovePreviewRange = (roomId) => {
+    if (!movingReservation || !moveTargetSlot || moveTargetSlot.roomId !== roomId) return null;
+    const { slotCount } = movingReservation;
+    const { slotIndex } = moveTargetSlot;
+    return {
+      start: slotIndex,
+      end: Math.min(slotIndex + slotCount, timeSlots.length - 1),
+    };
+  };
+
   // 시간 헤더용 - 정각만 표시
   const hourSlots = timeSlots.filter(slot => slot.endsWith(':00'));
 
@@ -459,47 +573,65 @@ export default function RoomReservation() {
   const isHourStart = (slot) => slot.endsWith(':00');
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* 헤더 */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex-shrink-0 transition-colors">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">회의실 예약</h1>
-          <button
-            onClick={() => setShowMyReservations(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            내 예약
-            {myReservations.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                {myReservations.length}
-              </span>
-            )}
-          </button>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">회의실 예약</h1>
+          <div className="flex items-center gap-2">
+            {/* 다크 모드 토글 */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={isDark ? '라이트 모드' : '다크 모드'}
+            >
+              {isDark ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={() => setShowMyReservations(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              내 예약
+              {myReservations.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                  {myReservations.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">날짜:</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">날짜:</label>
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">건물:</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">건물:</label>
             <select
               value={selectedBuilding?.id || ''}
               onChange={(e) => {
                 const building = buildings.find(b => b.id === e.target.value);
                 selectBuilding(building);
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px]"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[120px] bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="">선택하세요</option>
               {buildings.map(building => (
@@ -512,14 +644,14 @@ export default function RoomReservation() {
 
           {selectedBuilding && (
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">층:</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">층:</label>
               <select
                 value={selectedFloor?.id || ''}
                 onChange={(e) => {
                   const floor = floors.find(f => f.id === e.target.value);
                   selectFloor(floor);
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[100px]"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[100px] bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 <option value="">선택하세요</option>
                 {floors.map(floor => (
@@ -543,7 +675,7 @@ export default function RoomReservation() {
 
         {/* 참석자 가용시간 & 최적 시간 추천 */}
         {selectedParticipants.length > 0 && (
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-100 dark:border-blue-800">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-blue-800">
@@ -607,8 +739,8 @@ export default function RoomReservation() {
       <div className="flex-1 overflow-hidden p-6">
         {!selectedBuilding ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
               <p className="text-lg font-medium">건물을 선택해주세요</p>
@@ -617,8 +749,8 @@ export default function RoomReservation() {
           </div>
         ) : !selectedFloor ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <p className="text-lg font-medium">층을 선택해주세요</p>
@@ -627,39 +759,42 @@ export default function RoomReservation() {
           </div>
         ) : rooms.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-500">
+            <div className="text-center text-gray-500 dark:text-gray-400">
               <p className="text-lg font-medium">해당 층에 회의실이 없습니다</p>
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden select-none">
+          <div className="h-full flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden select-none transition-colors">
             {/* 스크롤 가능한 그리드 영역 */}
             <div className="flex-1 overflow-auto" ref={scrollContainerRef}>
               <div className="inline-block min-w-full">
                 {/* 시간 헤더 */}
-                <div className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-200">
-                  <div className="w-32 flex-shrink-0 px-3 py-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50 sticky left-0 z-30">
+                <div className="flex sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                  <div className="w-32 flex-shrink-0 px-3 py-3 font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 sticky left-0 z-30">
                     회의실
                   </div>
                   <div className="flex">
                     {hourSlots.map(hour => (
                       <div
                         key={hour}
-                        className="flex-shrink-0 flex items-center justify-center border-r border-gray-200 bg-gray-50"
+                        className="flex-shrink-0 flex items-center justify-center border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
                         style={{ width: '120px' }}
                       >
-                        <span className="text-xs font-semibold text-gray-700">{hour}</span>
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{hour}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* 회의실 행 */}
-                {rooms.map(room => (
-                  <div key={room.id} className="flex border-b border-gray-100 last:border-b-0">
-                    <div className="w-32 flex-shrink-0 px-3 py-2 border-r border-gray-200 bg-white sticky left-0 z-10">
-                      <div className="font-medium text-gray-900 text-sm truncate">{room.name}</div>
-                      <div className="text-xs text-gray-500">{room.capacity}인</div>
+                {rooms.map(room => {
+                  const movePreview = getMovePreviewRange(room.id);
+
+                  return (
+                  <div key={room.id} className="flex border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                    <div className="w-32 flex-shrink-0 px-3 py-2 border-r border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 sticky left-0 z-10">
+                      <div className="font-medium text-gray-900 dark:text-white text-sm truncate">{room.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{room.capacity}인</div>
                     </div>
                     <div className="flex">
                       {timeSlots.map((slot, slotIndex) => {
@@ -680,7 +815,9 @@ export default function RoomReservation() {
                               }
                             }}
                             onMouseEnter={() => {
-                              if (isResizing) {
+                              if (movingReservation) {
+                                handleReservationDragMove(room.id, slotIndex);
+                              } else if (isResizing) {
                                 handleResizeMove(room.id, slotIndex);
                               } else {
                                 handleMouseEnter(room.id, slotIndex);
@@ -688,20 +825,32 @@ export default function RoomReservation() {
                             }}
                             onContextMenu={(e) => handleContextMenu(e, room.id, slotIndex, room)}
                             className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative ${
-                              isHour ? 'border-l border-gray-200' : 'border-l border-gray-100'
+                              isHour ? 'border-l border-gray-200 dark:border-gray-600' : 'border-l border-gray-100 dark:border-gray-700'
                             } ${
-                              status === 'reserved'
-                                ? 'bg-red-200 hover:bg-red-300 cursor-pointer'
+                              // 이동 미리보기
+                              movePreview && slotIndex >= movePreview.start && slotIndex <= movePreview.end
+                                ? 'bg-green-400 dark:bg-green-500'
+                                : status === 'reserved'
+                                ? reservation?.isMyReservation
+                                  ? 'bg-purple-200 dark:bg-purple-700 hover:bg-purple-300 dark:hover:bg-purple-600 cursor-move'
+                                  : 'bg-red-200 dark:bg-red-700 hover:bg-red-300 dark:hover:bg-red-600 cursor-pointer'
                                 : status === 'selected'
-                                ? 'bg-blue-500'
+                                ? 'bg-blue-500 dark:bg-blue-600'
                                 : inDragRange
-                                ? 'bg-blue-300'
+                                ? 'bg-blue-300 dark:bg-blue-400'
                                 : isBusy
-                                ? 'bg-orange-100 hover:bg-orange-200'
-                                : 'hover:bg-blue-100'
+                                ? 'bg-orange-100 dark:bg-orange-900 hover:bg-orange-200 dark:hover:bg-orange-800'
+                                : 'hover:bg-blue-100 dark:hover:bg-blue-900'
                             }`}
-                            title={`${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})` : isBusy ? '참석자 일정 있음' : '예약 가능'}`}
+                            title={`${slot} - ${reservation ? `${reservation.title} (${reservation.organizer})${reservation.isMyReservation ? ' - 드래그하여 이동' : ''}` : isBusy ? '참석자 일정 있음' : '예약 가능'}`}
                           >
+                            {/* 내 예약 드래그 시작 */}
+                            {status === 'reserved' && reservation?.isMyReservation && (
+                              <div
+                                className="absolute inset-0 z-5"
+                                onMouseDown={(e) => handleReservationDragStart(reservation, room.id, slotIndex, e)}
+                              />
+                            )}
                             {/* 바쁜 시간대 표시 패턴 */}
                             {isBusy && status === 'available' && !inDragRange && (
                               <div className="absolute inset-0 opacity-50" style={{
@@ -726,28 +875,29 @@ export default function RoomReservation() {
                       })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {/* 미니맵 */}
-            <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 bg-gray-100">
+            <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700">
               <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-16">미니맵</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 w-16">미니맵</span>
                 <div
                   ref={minimapRef}
                   onClick={handleMinimapClick}
-                  className="flex-1 h-6 bg-white rounded border border-gray-300 relative cursor-pointer overflow-hidden"
+                  className="flex-1 h-6 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-600 relative cursor-pointer overflow-hidden"
                 >
                   {/* 시간 눈금 */}
                   {hourSlots.map((hour, idx) => (
                     <div
                       key={hour}
-                      className="absolute top-0 bottom-0 border-l border-gray-200"
+                      className="absolute top-0 bottom-0 border-l border-gray-200 dark:border-gray-600"
                       style={{ left: `${(idx / hourSlots.length) * 100}%` }}
                     >
                       {idx % 2 === 0 && (
-                        <span className="absolute -top-0.5 left-0.5 text-[8px] text-gray-400">{hour.split(':')[0]}</span>
+                        <span className="absolute -top-0.5 left-0.5 text-[8px] text-gray-400 dark:text-gray-500">{hour.split(':')[0]}</span>
                       )}
                     </div>
                   ))}
@@ -814,10 +964,10 @@ export default function RoomReservation() {
             </div>
 
             {/* 범례 */}
-            <div className="flex-shrink-0 px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm text-gray-600">
+            <div className="flex-shrink-0 px-4 py-3 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 flex items-center justify-between transition-colors">
+              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-4 h-4 bg-white border border-gray-300 rounded"></div>
+                  <div className="w-4 h-4 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-500 rounded"></div>
                   <span>가능</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -825,12 +975,16 @@ export default function RoomReservation() {
                   <span>선택</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-4 h-4 bg-red-200 rounded"></div>
+                  <div className="w-4 h-4 bg-red-200 dark:bg-red-700 rounded"></div>
                   <span>예약됨</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-4 bg-purple-200 dark:bg-purple-700 rounded"></div>
+                  <span>내 예약</span>
                 </div>
                 {showAvailability && selectedParticipants.length > 0 && (
                   <div className="flex items-center gap-1.5">
-                    <div className="w-4 h-4 bg-orange-100 rounded relative overflow-hidden">
+                    <div className="w-4 h-4 bg-orange-100 dark:bg-orange-900 rounded relative overflow-hidden">
                       <div className="absolute inset-0" style={{
                         backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(251, 146, 60, 0.5) 2px, rgba(251, 146, 60, 0.5) 4px)'
                       }} />
@@ -839,11 +993,11 @@ export default function RoomReservation() {
                   </div>
                 )}
               </div>
-              <div className="text-xs text-gray-500 flex items-center gap-2">
-                <span>드래그: 연속 선택 · 가장자리 드래그: 시간 조절 · 우클릭: 메뉴</span>
+              <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <span>드래그: 선택 · 내 예약 드래그: 이동 · 우클릭: 메뉴</span>
                 <button
                   onClick={() => setShowShortcutHelp(true)}
-                  className="px-1.5 py-0.5 bg-gray-200 hover:bg-gray-300 rounded text-gray-600 font-mono transition-colors"
+                  className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded text-gray-600 dark:text-gray-300 font-mono transition-colors"
                   title="키보드 단축키 (? 키)"
                 >
                   ?
