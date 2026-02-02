@@ -188,7 +188,11 @@ export default function FloatingChat() {
 
   // 로컬 메시지 (최적 시간 추천 결과 등)
   const [localMessages, setLocalMessages] = useState([]);
-  const allMessages = useMemo(() => [...messages, ...localMessages], [messages, localMessages]);
+  const allMessages = useMemo(() => {
+    const combined = [...messages, ...localMessages];
+    // 타임스탬프 기준 오름차순 정렬 (오래된 것이 위로)
+    return combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }, [messages, localMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
