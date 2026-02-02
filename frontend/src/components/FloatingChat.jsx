@@ -293,6 +293,7 @@ export default function FloatingChat() {
         optimalTimes,
         availableRooms,
         functionResults: results,
+        autoApplied: true, // 함수가 이미 실행되었음을 표시
       };
       setLocalMessages(prev => [...prev, assistantMessage]);
     } else {
@@ -534,7 +535,8 @@ export default function FloatingChat() {
         ) : (
           <>
             {allMessages.map((msg, idx) => {
-              const actions = msg.role === 'assistant' ? extractActions(msg.content, entityData) : [];
+              // 이미 자동 적용된 메시지는 "빠른 적용" 버튼 표시 안함
+              const actions = (msg.role === 'assistant' && !msg.autoApplied) ? extractActions(msg.content, entityData) : [];
               return (
                 <div
                   key={idx}

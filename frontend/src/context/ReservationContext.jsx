@@ -1139,16 +1139,24 @@ export function ReservationProvider({ children }) {
 
   // LLM 제어용 함수들
   const setParticipantsByNames = useCallback((names, type = ATTENDEE_TYPES.REQUIRED) => {
-    const participants = employees.filter(e =>
+    const newParticipants = employees.filter(e =>
       names.some(name => e.name.includes(name) || name.includes(e.name))
     );
-    // 기존 참석자 초기화 후 추가
+    // 기존 참석자에 추가 (중복 제거)
     if (type === ATTENDEE_TYPES.REQUIRED) {
-      setRequiredAttendees(participants);
+      setRequiredAttendees(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const toAdd = newParticipants.filter(p => !existingIds.has(p.id));
+        return [...prev, ...toAdd];
+      });
     } else if (type === ATTENDEE_TYPES.OPTIONAL) {
-      setOptionalAttendees(participants);
+      setOptionalAttendees(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const toAdd = newParticipants.filter(p => !existingIds.has(p.id));
+        return [...prev, ...toAdd];
+      });
     }
-    return participants;
+    return newParticipants;
   }, [employees]);
 
   const setBuildingByName = useCallback((name) => {
