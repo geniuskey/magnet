@@ -4,16 +4,30 @@
 
 ---
 
+## Demo
+
+<div style="text-align: center; margin: 2rem 0;">
+  <a href="https://youtu.be/9EwUjulNWqc" target="_blank">
+    <img src="https://img.youtube.com/vi/9EwUjulNWqc/maxresdefault.jpg" alt="Demo Video" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+  </a>
+  <p><em>클릭하여 데모 영상 보기</em></p>
+</div>
+
 ## 개요
 
 Meeting Scheduler AI는 LLM(Large Language Model)을 활용하여 자연어로 회의 일정을 조율하고 회의실을 예약할 수 있는 시스템입니다. 기존 사내 시스템(그룹웨어, HR 시스템, 캘린더 등)과 연동하여 사용할 수 있습니다.
 
 ## 주요 기능
 
-- :material-chat-processing: **자연어 회의 예약** - "김철수, 이영희와 내일 오후 2시에 본관 대회의실 예약해줘"
-- :material-account-search: **스마트 참석자 검색** - 이름, 부서, 직급으로 직원 검색
+- :material-chat-processing: **자연어 회의 예약** - "세미나실 A 오전 10시 예약해줘", "대회의실 B 2시부터 3시까지"
+- :material-lightning-bolt: **빠른 적용** - AI가 분석한 회의실, 시간, 참석자를 원클릭으로 적용
+- :material-account-search: **스마트 참석자 검색** - 이름, 부서, 직급, 그룹으로 직원 검색
 - :material-calendar-clock: **최적 시간 추천** - 참석자들의 일정을 분석하여 최적의 회의 시간 추천
+- :material-filter-variant: **회의실 검색/필터** - 이름, 수용인원, 장비(프로젝터, 화이트보드 등)로 필터링
+- :material-layers-triple: **멀티 플로어 뷰** - 여러 층의 회의실을 동시에 확인
 - :material-door: **회의실 실시간 현황** - 건물/층별 회의실 예약 현황 확인
+- :material-gesture-swipe-horizontal: **드래그 예약** - 타임라인에서 드래그로 시간 선택, 예약 이동/리사이즈
+- :material-theme-light-dark: **다크모드 지원** - 시스템 설정 또는 수동 전환
 - :material-repeat: **반복 회의 지원** - 매일, 매주, 격주, 매월 반복 예약
 
 <figure markdown="span">
