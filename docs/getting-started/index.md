@@ -63,3 +63,4 @@ SSO 또는 OAuth 2.0을 설정합니다.
 
 - [설치하기](installation.md)
 - [아키텍처 이해하기](architecture.md)
+- [개발자 가이드](development.md)

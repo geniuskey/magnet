@@ -145,7 +145,104 @@ docker-compose restart nginx
 - 이미 예약된 시간인지 확인
 - 로그에서 에러 메시지 확인
 
-## 9. 연락처
+## 9. 스케일링
+
+### 수평 확장
+
+```yaml title="docker-compose.scale.yml"
+services:
+  backend:
+    deploy:
+      replicas: 3
+    environment:
+      - REDIS_URL=redis://redis:6379
+```
+
+```bash
+docker-compose -f docker-compose.scale.yml up -d --scale backend=3
+```
+
+### Nginx 로드밸런싱
+
+```nginx title="nginx/nginx.conf"
+upstream backend {
+    least_conn;
+    server backend1:8000;
+    server backend2:8000;
+    server backend3:8000;
+}
+
+server {
+    location /api {
+        proxy_pass http://backend;
+    }
+}
+```
+
+### Redis 클러스터
+
+대규모 트래픽 시 Redis 클러스터 구성:
+
+```bash
+# Redis 클러스터 모드 활성화
+redis-server --cluster-enabled yes
+```
+
+## 10. 모니터링 대시보드
+
+### Prometheus + Grafana 설정
+
+```yaml title="docker-compose.monitoring.yml"
+services:
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+```
+
+### 주요 메트릭
+
+| 메트릭 | 설명 | 임계값 |
+|--------|------|--------|
+| `http_request_duration_seconds` | API 응답 시간 | p95 < 1s |
+| `http_requests_total` | 총 요청 수 | - |
+| `llm_request_duration_seconds` | LLM 호출 시간 | p95 < 10s |
+| `redis_connected_clients` | Redis 연결 수 | < 100 |
+
+### 알림 설정
+
+```yaml title="alertmanager.yml"
+route:
+  receiver: 'slack'
+  group_wait: 30s
+
+receivers:
+  - name: 'slack'
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+```
+
+## 11. 보안 체크리스트
+
+- [ ] SSL/TLS 인증서 적용
+- [ ] API 키 환경변수로 관리 (하드코딩 금지)
+- [ ] Redis 비밀번호 설정
+- [ ] 방화벽 규칙 설정 (필요 포트만 개방)
+- [ ] 정기적인 보안 패치 적용
+- [ ] 접근 로그 모니터링
+- [ ] 민감 정보 마스킹 (로그)
+
+## 12. 연락처
 
 - 개발팀: dev-team@company.com
 - 인프라팀: infra@company.com

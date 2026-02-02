@@ -61,6 +61,88 @@ graph TB
 | **AI 채팅** | 플로팅 채팅 창, 자연어 명령 처리 |
 | **상태 관리** | React Context를 사용한 전역 상태 관리 |
 
+### 프론트엔드 컴포넌트 구조
+
+```mermaid
+graph TB
+    subgraph App["App.jsx"]
+        subgraph Contexts["Context Providers"]
+            RC[ReservationContext]
+            TC[ThemeContext]
+            CC[ChatContext]
+        end
+
+        subgraph Layout["레이아웃"]
+            Header[Header]
+            Main[Main Content]
+        end
+
+        subgraph MainContent["메인 콘텐츠"]
+            RR[RoomReservation<br/>타임라인 뷰]
+            SB[Sidebar<br/>참석자/설정]
+            FC[FloatingChat<br/>AI 어시스턴트]
+        end
+
+        subgraph Modals["모달"]
+            RM[ReservationModal]
+            DM[ReservationDetailModal]
+            MR[MyReservations]
+        end
+    end
+
+    RC --> RR
+    RC --> SB
+    RC --> FC
+    RC --> RM
+
+    TC --> Header
+    TC --> RR
+
+    CC --> FC
+
+    FC --> |parseUserIntent| FCS[functionCalling.js]
+    FCS --> |setTimeByRange<br/>setRoomByName<br/>etc.| RC
+
+    RR --> |드래그 선택| RC
+    SB --> |참석자 선택| RC
+    RM --> |예약 생성| RC
+```
+
+### 상태 관리 구조
+
+```mermaid
+graph LR
+    subgraph ReservationContext["ReservationContext 상태"]
+        B[buildings]
+        F[floors]
+        R[rooms]
+        RV[reservations]
+        SD[selectedDate]
+        SF[selectedFloors]
+        SR[selectedRoom]
+        ST[selectedTimeSlots]
+        P[participants]
+        MD[meetingDuration]
+    end
+
+    subgraph Actions["주요 액션"]
+        TF[toggleFloor]
+        STR[setTimeByRange]
+        CR[createReservation]
+        MV[moveReservation]
+        FOT[findOptimalTimes]
+    end
+
+    B --> F
+    F --> R
+    SF --> R
+    R --> RV
+    SD --> RV
+    SR --> ST
+    P --> FOT
+    ST --> CR
+```
+
 ### 백엔드
 
 | 컴포넌트 | 설명 |
