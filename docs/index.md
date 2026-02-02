@@ -7,10 +7,15 @@
 ## Demo
 
 <div style="text-align: center; margin: 2rem 0;">
-  <a href="https://youtu.be/9EwUjulNWqc" target="_blank">
-    <img src="https://img.youtube.com/vi/9EwUjulNWqc/maxresdefault.jpg" alt="Demo Video" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-  </a>
-  <p><em>클릭하여 데모 영상 보기</em></p>
+  <iframe
+    width="100%"
+    height="400"
+    src="https://www.youtube.com/embed/9EwUjulNWqc"
+    frameborder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen
+    style="max-width: 720px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+  </iframe>
 </div>
 
 ## 개요
