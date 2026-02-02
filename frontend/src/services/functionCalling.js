@@ -197,44 +197,43 @@ export function parseUserIntent(message, context = {}) {
   const lowerMsg = message.toLowerCase();
   const functionCalls = [];
 
+  // 시간 추출 (먼저 수행)
+  const times = extractTimeRange(message, context.meetingDuration);
+
+  // 회의실 추출
+  const room = extractRoom(message, context.allRooms || []);
+
   // 예약 생성 패턴
   const reservationPattern = /(.+?)[과와,]\s*(.+?)[과와]?\s*(내일|오늘|모레|\d{4}-\d{2}-\d{2}|다음\s*주)?\s*(오전|오후)?\s*(\d{1,2})시?\s*[~\-부터에]?\s*(오전|오후)?\s*(\d{1,2})시?.*?(회의실|대회의실|소회의실|세미나실|룸)/;
   const quickReservationMatch = message.match(reservationPattern);
 
-  // "예약" 키워드가 있으면 예약 시도 (회의실+시간, 또는 해줘 포함)
-  const hasReservationIntent = lowerMsg.includes('예약') && (
-    lowerMsg.includes('해줘') ||
-    lowerMsg.includes('해 줘') ||
-    lowerMsg.includes('할게') ||
-    lowerMsg.includes('하고 싶') ||
-    /(회의실|세미나실|강의실|룸).*(오전|오후|\d+시)/.test(message) ||
-    /(오전|오후|\d+시).*(회의실|세미나실|강의실|룸)/.test(message)
+  // "예약" 키워드가 있거나, 회의실+시간 조합이면 예약 시도
+  const hasReservationIntent = lowerMsg.includes('예약') || (
+    (room || context.selectedRoom) && times
   );
 
   if (quickReservationMatch || hasReservationIntent) {
     // 참석자 이름 추출
     const names = extractNames(message, context.employees || []);
 
-    // 시간 추출
-    const times = extractTimeRange(message);
+    // 날짜 추출 (없으면 오늘)
+    const date = extractDate(message) || '오늘';
 
-    // 날짜 추출
-    const date = extractDate(message);
+    // 회의실: 메시지에서 추출 또는 현재 선택된 회의실 사용
+    const roomName = room || (context.selectedRoom ?
+      (context.allRooms || []).find(r => r.id === context.selectedRoom)?.name : null);
 
-    // 회의실 추출
-    const room = extractRoom(message, context.allRooms || []);
-
-    if (names.length > 0 || times || room) {
+    if (times && roomName) {
       functionCalls.push({
         name: 'createQuickReservation',
         arguments: {
           title: '회의',
           organizerName: names[0] || null,
           requiredNames: names.slice(1),
-          roomName: room,
-          date: date || '오늘',
-          startTime: times?.startTime,
-          endTime: times?.endTime,
+          roomName: roomName,
+          date: date,
+          startTime: times.startTime,
+          endTime: times.endTime,
         },
       });
       return functionCalls;
@@ -288,18 +287,16 @@ export function parseUserIntent(message, context = {}) {
     }
   }
 
-  // 시간 설정 패턴
-  const times = extractTimeRange(message);
-  if (times && (lowerMsg.includes('시간') || lowerMsg.includes('시에') || lowerMsg.includes('시부터'))) {
+  // 시간 설정 패턴 (예약 의도가 아닐 때만)
+  if (times && !functionCalls.length && (lowerMsg.includes('시간') || lowerMsg.includes('시에') || lowerMsg.includes('시부터'))) {
     functionCalls.push({
       name: 'setTimeByRange',
       arguments: times,
     });
   }
 
-  // 회의실 선택 패턴
-  const room = extractRoom(message, context.allRooms || []);
-  if (room && (lowerMsg.includes('회의실') || lowerMsg.includes('룸'))) {
+  // 회의실 선택 패턴 (예약 의도가 아닐 때만)
+  if (room && !functionCalls.length && (lowerMsg.includes('회의실') || lowerMsg.includes('룸') || lowerMsg.includes('세미나실'))) {
     functionCalls.push({
       name: 'setRoomByName',
       arguments: { roomName: room },
@@ -666,7 +663,7 @@ function extractNames(message, employees) {
   return Array.from(namesSet);
 }
 
-function extractTimeRange(message) {
+function extractTimeRange(message, meetingDuration = 60) {
   // 14시~15시, 오후 2시부터 3시, 14:00-15:00 등
   const patterns = [
     /(\d{1,2}):(\d{2})\s*[~\-부터]\s*(\d{1,2}):(\d{2})/,
@@ -710,7 +707,7 @@ function extractTimeRange(message) {
     }
   }
 
-  // 단일 시간 패턴 (오전/오후 10시 -> 1시간 회의로 가정)
+  // 단일 시간 패턴 (오전/오후 10시 -> UI의 회의시간 사용)
   const singleTimePattern = /(오전|오후)?\s*(\d{1,2})시/;
   const singleMatch = message.match(singleTimePattern);
   if (singleMatch) {
@@ -720,11 +717,15 @@ function extractTimeRange(message) {
     // 오전/오후 명시 없으면 업무시간 기준 추정
     if (!singleMatch[1] && startHour >= 1 && startHour <= 6) startHour += 12;
 
-    const endHour = startHour + 1; // 1시간 회의 기본값
+    // UI 회의시간 설정 사용 (기본 60분)
+    const durationMinutes = meetingDuration || 60;
+    const totalEndMinutes = startHour * 60 + durationMinutes;
+    const endHour = Math.floor(totalEndMinutes / 60);
+    const endMin = totalEndMinutes % 60;
 
     return {
       startTime: `${startHour.toString().padStart(2, '0')}:00`,
-      endTime: `${endHour.toString().padStart(2, '0')}:00`,
+      endTime: `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`,
     };
   }
 

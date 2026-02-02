@@ -9,52 +9,46 @@ const STORAGE_KEY = 'floating_chat_position';
 // 기본 위치 (오른쪽 하단, 미니맵 위)
 const DEFAULT_POSITION = { right: 24, bottom: 72 }; // right-6, bottom-[72px] (미니맵 h-12 + 여유 공간)
 
-// 엔티티 매칭 유틸
+// 엔티티 매칭 유틸 (중복 제거)
 const extractActions = (text, { buildings, employees, allRooms }) => {
+  const seen = new Set(); // 중복 체크용
   const actions = [];
+
+  const addAction = (type, label, data) => {
+    const key = `${type}:${label}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      actions.push({ type, label, data });
+    }
+  };
 
   // 건물 매칭
   buildings.forEach(building => {
     if (text.includes(building.name)) {
-      actions.push({
-        type: 'building',
-        label: `건물: ${building.name}`,
-        data: building,
-      });
+      addAction('building', `건물: ${building.name}`, building);
     }
   });
 
   // 층 매칭
-  const floorMatch = text.match(/(\d)층/g);
+  const floorMatch = text.match(/(\d+)층/g);
   if (floorMatch) {
-    floorMatch.forEach(f => {
-      actions.push({
-        type: 'floor',
-        label: `층: ${f}`,
-        data: f,
-      });
+    const uniqueFloors = [...new Set(floorMatch)];
+    uniqueFloors.forEach(f => {
+      addAction('floor', `층: ${f}`, f);
     });
   }
 
   // 회의실 매칭
   allRooms.forEach(room => {
     if (text.includes(room.name)) {
-      actions.push({
-        type: 'room',
-        label: `회의실: ${room.name}`,
-        data: room,
-      });
+      addAction('room', `회의실: ${room.name}`, room);
     }
   });
 
   // 직원 매칭
   employees.forEach(emp => {
     if (text.includes(emp.name)) {
-      actions.push({
-        type: 'participant',
-        label: `참여자: ${emp.name}`,
-        data: emp,
-      });
+      addAction('participant', `참여자: ${emp.name}`, emp);
     }
   });
 
@@ -67,11 +61,7 @@ const extractActions = (text, { buildings, employees, allRooms }) => {
     const endMin = timeRangeMatch[4] ? parseInt(timeRangeMatch[4]) : 0;
     const startTime = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
     const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
-    actions.push({
-      type: 'time',
-      label: `시간: ${startTime} ~ ${endTime}`,
-      data: { startTime, endTime },
-    });
+    addAction('time', `시간: ${startTime} ~ ${endTime}`, { startTime, endTime });
   }
 
   return actions;
@@ -122,12 +112,17 @@ export default function FloatingChat() {
     allRooms: reservation.allRooms,
   }), [reservation.buildings, reservation.employees, reservation.allRooms]);
 
-  // Function Calling 컨텍스트
+  // Function Calling 컨텍스트 (현재 선택 상태 포함)
   const functionContext = useMemo(() => ({
     buildings: reservation.buildings,
     employees: reservation.employees,
     allRooms: reservation.allRooms,
-  }), [reservation.buildings, reservation.employees, reservation.allRooms]);
+    myGroups: reservation.myGroups,
+    // 현재 선택 상태
+    selectedRoom: reservation.selectedRoom,
+    selectedDate: reservation.selectedDate,
+    meetingDuration: reservation.meetingDuration,
+  }), [reservation.buildings, reservation.employees, reservation.allRooms, reservation.myGroups, reservation.selectedRoom, reservation.selectedDate, reservation.meetingDuration]);
 
   // 액션 적용 핸들러 (토글 방식)
   const handleApplyAction = useCallback((action, msgIdx) => {
