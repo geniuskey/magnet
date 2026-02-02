@@ -23,7 +23,6 @@ class LLMClient:
 
     def __init__(self, provider: Optional[str] = None):
         self.provider = LLMProvider(provider or settings.llm_provider)
-        self.model = settings.llm_model
         self.max_retries = 3
 
         # 제공자별 클라이언트 초기화
@@ -37,27 +36,23 @@ class LLMClient:
     def _init_anthropic(self):
         """Anthropic 클라이언트 초기화"""
         from anthropic import Anthropic
-        self.client = Anthropic(api_key=settings.llm_api_key)
-        if not self.model or self.model.startswith("gpt") or self.model.startswith("gemini"):
-            self.model = "claude-sonnet-4-20250514"
+        self.client = Anthropic(api_key=settings.get_api_key("anthropic"))
+        self.model = settings.get_model("anthropic")
 
     def _init_openai(self):
         """OpenAI 클라이언트 초기화"""
         from openai import OpenAI
         self.client = OpenAI(
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_api_url if settings.llm_api_url else None,
+            api_key=settings.get_api_key("openai"),
+            base_url=settings.openai_api_url if settings.openai_api_url else None,
         )
-        if not self.model or self.model.startswith("claude") or self.model.startswith("gemini"):
-            self.model = "gpt-4o"
+        self.model = settings.get_model("openai")
 
     def _init_gemini(self):
-        """Gemini 클라이언트 초기화"""
-        import google.generativeai as genai
-        genai.configure(api_key=settings.llm_api_key)
-        if not self.model or not self.model.startswith("gemini"):
-            self.model = "gemini-1.5-pro"
-        self.client = genai.GenerativeModel(self.model)
+        """Gemini 클라이언트 초기화 (google-genai 패키지)"""
+        from google import genai
+        self.client = genai.Client(api_key=settings.get_api_key("gemini"))
+        self.model = settings.get_model("gemini")
 
     async def chat(
         self,
@@ -86,6 +81,86 @@ class LLMClient:
             return await self._chat_openai(messages, tools, tool_choice, system_prompt, max_tokens)
         elif self.provider == LLMProvider.GEMINI:
             return await self._chat_gemini(messages, tools, tool_choice, system_prompt, max_tokens)
+
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        tools: Optional[list[dict]] = None,
+        tool_choice: Optional[dict] = None,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 4096,
+    ):
+        """
+        LLM 스트리밍 대화
+
+        Yields:
+            str: 응답 텍스트 청크
+        """
+        if self.provider == LLMProvider.ANTHROPIC:
+            async for chunk in self._chat_stream_anthropic(messages, tools, tool_choice, system_prompt, max_tokens):
+                yield chunk
+        elif self.provider == LLMProvider.OPENAI:
+            async for chunk in self._chat_stream_openai(messages, tools, tool_choice, system_prompt, max_tokens):
+                yield chunk
+        elif self.provider == LLMProvider.GEMINI:
+            async for chunk in self._chat_stream_gemini(messages, tools, tool_choice, system_prompt, max_tokens):
+                yield chunk
+
+    async def _chat_stream_anthropic(self, messages, tools, tool_choice, system_prompt, max_tokens):
+        """Anthropic 스트리밍 API 호출"""
+        kwargs = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": self._convert_messages_anthropic(messages),
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+        if tools:
+            kwargs["tools"] = self._convert_tools_anthropic(tools)
+
+        with self.client.messages.stream(**kwargs) as stream:
+            for text in stream.text_stream:
+                yield text
+
+    async def _chat_stream_openai(self, messages, tools, tool_choice, system_prompt, max_tokens):
+        """OpenAI 스트리밍 API 호출"""
+        openai_messages = self._convert_messages_openai(messages, system_prompt)
+        kwargs = {
+            "model": self.model,
+            "max_completion_tokens": max_tokens,  # 새 모델은 max_completion_tokens 사용
+            "messages": openai_messages,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = self._convert_tools_openai(tools)
+
+        stream = self.client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    async def _chat_stream_gemini(self, messages, tools, tool_choice, system_prompt, max_tokens):
+        """Gemini 스트리밍 API 호출 (google-genai 패키지)"""
+        from google.genai import types
+
+        gemini_contents = self._convert_messages_gemini(messages, system_prompt)
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=max_tokens,
+            system_instruction=system_prompt if system_prompt else None,
+        )
+
+        if tools:
+            config.tools = self._convert_tools_gemini(tools)
+
+        # 스트리밍 응답
+        for chunk in self.client.models.generate_content_stream(
+            model=self.model,
+            contents=gemini_contents,
+            config=config,
+        ):
+            if hasattr(chunk, "text") and chunk.text:
+                yield chunk.text
 
     async def _chat_anthropic(
         self,
@@ -147,7 +222,7 @@ class LLMClient:
 
                 kwargs = {
                     "model": self.model,
-                    "max_tokens": max_tokens,
+                    "max_completion_tokens": max_tokens,  # 새 모델은 max_completion_tokens 사용
                     "messages": openai_messages,
                 }
 
@@ -179,44 +254,37 @@ class LLMClient:
         system_prompt: Optional[str],
         max_tokens: int,
     ) -> dict:
-        """Gemini API 호출"""
-        import google.generativeai as genai
+        """Gemini API 호출 (google-genai 패키지)"""
+        from google.genai import types
 
         for attempt in range(self.max_retries):
             try:
                 # Gemini용 메시지 변환
-                gemini_messages = self._convert_messages_gemini(messages, system_prompt)
-
-                # 도구 설정
-                gemini_tools = None
-                if tools:
-                    gemini_tools = self._convert_tools_gemini(tools)
+                gemini_contents = self._convert_messages_gemini(messages, system_prompt)
 
                 # 생성 설정
-                generation_config = genai.GenerationConfig(
+                config = types.GenerateContentConfig(
                     max_output_tokens=max_tokens,
+                    system_instruction=system_prompt if system_prompt else None,
                 )
 
-                # 채팅 세션 시작
-                chat = self.client.start_chat(history=gemini_messages[:-1] if len(gemini_messages) > 1 else [])
+                # 도구 설정
+                if tools:
+                    config.tools = self._convert_tools_gemini(tools)
 
                 # 응답 생성
-                if gemini_tools:
-                    response = chat.send_message(
-                        gemini_messages[-1]["parts"] if gemini_messages else "",
-                        generation_config=generation_config,
-                        tools=gemini_tools,
-                    )
-                else:
-                    response = chat.send_message(
-                        gemini_messages[-1]["parts"] if gemini_messages else "",
-                        generation_config=generation_config,
-                    )
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=gemini_contents,
+                    config=config,
+                )
 
                 return self._parse_response_gemini(response)
 
             except Exception as e:
-                logger.warning(f"Gemini API error, attempt {attempt + 1}/{self.max_retries}: {e}")
+                logger.error(f"Gemini API error, attempt {attempt + 1}/{self.max_retries}: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 if attempt == self.max_retries - 1:
                     raise
                 import asyncio
@@ -333,74 +401,114 @@ class LLMClient:
         return result
 
     # Gemini 변환 메서드
-    def _convert_messages_gemini(self, messages: list[dict], system_prompt: Optional[str]) -> list[dict]:
-        """Gemini용 메시지 변환"""
+    def _convert_messages_gemini(self, messages: list[dict], system_prompt: Optional[str]) -> list:
+        """Gemini용 메시지 변환 (google-genai 패키지)"""
+        from google.genai import types
+
         converted = []
 
-        # 시스템 프롬프트를 첫 사용자 메시지에 포함
-        system_prefix = f"{system_prompt}\n\n" if system_prompt else ""
-
-        for i, msg in enumerate(messages):
+        for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+
+            # content가 리스트인 경우 (tool_use 등) 문자열로 변환
+            if isinstance(content, list):
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict):
+                        if part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part.get("type") == "tool_use":
+                            text_parts.append(f"[Tool: {part.get('name')}]")
+                        elif part.get("type") == "tool_result":
+                            text_parts.append(part.get("content", ""))
+                    else:
+                        text_parts.append(str(part))
+                content = "\n".join(text_parts)
 
             if role == "system":
                 continue
             elif role == "assistant":
-                converted.append({"role": "model", "parts": content})
+                converted.append(types.Content(role="model", parts=[types.Part(text=content)]))
             elif role == "tool":
-                # Gemini에서는 function response로 처리
-                converted.append({
-                    "role": "function",
-                    "parts": content if isinstance(content, str) else json.dumps(content, ensure_ascii=False),
-                })
+                tool_content = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+                converted.append(types.Content(role="user", parts=[types.Part(text=f"[Tool Result]: {tool_content}")]))
             else:
-                # 첫 번째 사용자 메시지에 시스템 프롬프트 추가
-                if i == 0 or (i == 1 and messages[0].get("role") == "system"):
-                    converted.append({"role": "user", "parts": system_prefix + content})
-                    system_prefix = ""
-                else:
-                    converted.append({"role": "user", "parts": content})
+                converted.append(types.Content(role="user", parts=[types.Part(text=content)]))
 
         return converted
 
     def _convert_tools_gemini(self, tools: list[dict]) -> list:
-        """Gemini용 도구 변환"""
-        import google.generativeai as genai
+        """Gemini용 도구 변환 (google-genai 패키지)"""
+        from google.genai import types
 
         function_declarations = []
         for tool in tools:
-            function_declarations.append(genai.protos.FunctionDeclaration(
+            # 파라미터 스키마 변환
+            params = tool.get("parameters", {})
+            properties = {}
+            for k, v in params.get("properties", {}).items():
+                prop_type = v.get("type", "string").upper()
+
+                if prop_type == "ARRAY":
+                    # 배열 타입은 items 필드 필수
+                    items_type = v.get("items", {}).get("type", "string").upper()
+                    properties[k] = types.Schema(
+                        type="ARRAY",
+                        description=v.get("description", ""),
+                        items=types.Schema(type=items_type),
+                    )
+                else:
+                    properties[k] = types.Schema(
+                        type=prop_type,
+                        description=v.get("description", ""),
+                    )
+
+            function_declarations.append(types.FunctionDeclaration(
                 name=tool["name"],
                 description=tool["description"],
-                parameters=genai.protos.Schema(
-                    type=genai.protos.Type.OBJECT,
-                    properties={
-                        k: genai.protos.Schema(type=genai.protos.Type.STRING)
-                        for k in tool.get("parameters", {}).get("properties", {}).keys()
-                    },
-                    required=tool.get("parameters", {}).get("required", []),
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties=properties,
+                    required=params.get("required", []),
                 ),
             ))
 
-        return [genai.protos.Tool(function_declarations=function_declarations)]
+        return [types.Tool(function_declarations=function_declarations)]
 
     def _parse_response_gemini(self, response) -> dict:
-        """Gemini 응답 파싱"""
+        """Gemini 응답 파싱 (google-genai 패키지)"""
         result = {"content": "", "tool_calls": [], "stop_reason": "end_turn"}
 
-        for candidate in response.candidates:
-            for part in candidate.content.parts:
-                if hasattr(part, "text"):
-                    result["content"] += part.text
-                elif hasattr(part, "function_call"):
-                    fc = part.function_call
-                    result["tool_calls"].append({
-                        "id": f"call_{hash(fc.name)}",
-                        "name": fc.name,
-                        "arguments": dict(fc.args),
-                    })
-                    result["stop_reason"] = "tool_use"
+        try:
+            # 텍스트 응답 추출
+            if hasattr(response, "text") and response.text:
+                result["content"] = response.text
+
+            # candidates에서 function call 확인
+            if hasattr(response, "candidates") and response.candidates:
+                for candidate in response.candidates:
+                    if not hasattr(candidate, "content") or candidate.content is None:
+                        continue
+                    if not hasattr(candidate.content, "parts") or candidate.content.parts is None:
+                        continue
+
+                    for part in candidate.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            if not result["content"]:
+                                result["content"] = part.text
+                        elif hasattr(part, "function_call") and part.function_call:
+                            fc = part.function_call
+                            result["tool_calls"].append({
+                                "id": f"call_{hash(fc.name)}",
+                                "name": fc.name,
+                                "arguments": dict(fc.args) if fc.args else {},
+                            })
+                            result["stop_reason"] = "tool_use"
+        except Exception as e:
+            logger.error(f"Error parsing Gemini response: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
         return result
 
@@ -450,3 +558,20 @@ class MockLLMClient:
             "tool_calls": [],
             "stop_reason": "end_turn",
         }
+
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        tools: Optional[list[dict]] = None,
+        tool_choice: Optional[dict] = None,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 4096,
+    ):
+        """Mock 스트리밍 대화"""
+        import asyncio
+        response_text = "안녕하세요! 회의 일정 조율을 도와드릴게요. 어떤 회의를 잡으시겠어요?"
+
+        # 텍스트를 청크로 나눠서 yield
+        for char in response_text:
+            yield char
+            await asyncio.sleep(0.02)  # 타이핑 효과

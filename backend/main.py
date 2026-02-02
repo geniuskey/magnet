@@ -61,11 +61,16 @@ async def root():
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
+
+    # Windows에서 reload 모드가 불안정할 수 있음
+    # 환경변수로 reload 제어 (기본: False)
+    reload_enabled = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
 
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=reload_enabled,
     )

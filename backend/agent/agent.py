@@ -26,7 +26,7 @@ class MeetingAgent:
 
     def __init__(self, use_mock_llm: bool = False):
         # LLM 클라이언트
-        if use_mock_llm or not settings.llm_api_key:
+        if use_mock_llm or not settings.get_api_key():
             logger.warning("Using Mock LLM client")
             self.llm = MockLLMClient()
         else:
@@ -194,6 +194,46 @@ class MeetingAgent:
             ),
             status=status,
         )
+
+    async def process_stream(
+        self,
+        user_message: str,
+        conversation: Conversation,
+    ):
+        """
+        스트리밍 사용자 메시지 처리
+
+        Yields:
+            dict: 스트리밍 청크 (type: content/tool_call)
+        """
+        try:
+            # 시스템 프롬프트 생성
+            system_prompt = self.prompt_manager.get_system_prompt()
+
+            # 컨텍스트 요약 추가
+            ctx = ConversationContext(conversation)
+            context_summary = self.prompt_manager.get_context_summary(conversation.context)
+            if context_summary:
+                system_prompt += f"\n\n{context_summary}"
+
+            # 대화 이력 구성
+            messages = conversation.get_messages_for_llm()
+
+            # 도구 스키마
+            tools = self.tools.get_all_schemas()
+
+            # 첫 응답: 진짜 스트리밍 시도
+            # 도구 호출 없는 단순 대화는 바로 스트리밍
+            async for chunk in self.llm.chat_stream(
+                messages=messages,
+                tools=tools,
+                system_prompt=system_prompt,
+            ):
+                yield {"type": "content", "text": chunk}
+
+        except Exception as e:
+            logger.error(f"Agent streaming error: {str(e)}", exc_info=True)
+            yield {"type": "content", "text": "죄송합니다, 요청을 처리하는 중 오류가 발생했습니다."}
 
     def _update_context_from_result(
         self,

@@ -998,17 +998,7 @@ export default function RoomReservation() {
               <p className="text-sm mt-1">회의실 현황을 확인할 수 있습니다</p>
             </div>
           </div>
-        ) : selectedFloors.size === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center text-gray-500 dark:text-gray-400">
-              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <p className="text-lg font-medium">층을 선택해주세요</p>
-              <p className="text-sm mt-1">{selectedBuilding.name}의 회의실을 확인합니다</p>
-            </div>
-          </div>
-        ) : filteredRooms.length === 0 ? (
+        ) : filteredRooms.length === 0 && rooms.length > 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-gray-500 dark:text-gray-400">
               <p className="text-lg font-medium">
@@ -1048,7 +1038,17 @@ export default function RoomReservation() {
                 </div>
 
                 {/* 회의실 행 - 층별 그룹화 */}
-                {Array.from(selectedFloors).map(floorId => {
+                {selectedFloors.size === 0 ? (
+                  <div className="flex items-center justify-center py-16 text-gray-500 dark:text-gray-400">
+                    <div className="text-center">
+                      <svg className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <p className="font-medium">층을 선택해주세요</p>
+                      <p className="text-sm mt-1">{selectedBuilding?.name}의 회의실을 확인합니다</p>
+                    </div>
+                  </div>
+                ) : Array.from(selectedFloors).map(floorId => {
                   const floor = floors.find(f => f.id === floorId);
                   const floorRooms = filteredRooms.filter(r => r.floorId === floorId);
                   if (floorRooms.length === 0) return null;

@@ -8,10 +8,42 @@ class Settings(BaseSettings):
     """애플리케이션 설정"""
 
     # LLM 설정
-    llm_provider: str = "anthropic"  # anthropic, openai, gemini
-    llm_api_url: str = ""  # OpenAI compatible API URL (optional)
-    llm_api_key: str = ""
-    llm_model: str = "claude-sonnet-4-20250514"  # 자동 설정됨
+    llm_provider: str = "gemini"  # anthropic, openai, gemini
+
+    # 각 provider별 API 키
+    anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+
+    # 각 provider별 모델명
+    anthropic_model: str = "claude-sonnet-4-20250514"
+    openai_model: str = "gpt-5-mini"
+    gemini_model: str = "gemini-3-flash-preview"
+
+    # OpenAI compatible API URL (optional)
+    openai_api_url: str = ""
+
+    def get_api_key(self, provider: str = None) -> str:
+        """현재 provider에 맞는 API 키 반환"""
+        p = provider or self.llm_provider
+        if p == "anthropic":
+            return self.anthropic_api_key
+        elif p == "openai":
+            return self.openai_api_key
+        elif p == "gemini":
+            return self.gemini_api_key
+        return ""
+
+    def get_model(self, provider: str = None) -> str:
+        """현재 provider에 맞는 모델명 반환"""
+        p = provider or self.llm_provider
+        if p == "anthropic":
+            return self.anthropic_model
+        elif p == "openai":
+            return self.openai_model
+        elif p == "gemini":
+            return self.gemini_model
+        return ""
 
     # 사내 API
     org_api_url: str = "https://intranet.company.com/api/org"

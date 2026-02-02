@@ -189,8 +189,13 @@ export default function FloatingChat() {
   // 로컬 메시지 (최적 시간 추천 결과 등)
   const [localMessages, setLocalMessages] = useState([]);
   const allMessages = useMemo(() => {
-    const combined = [...messages, ...localMessages];
-    // 타임스탬프 기준 오름차순 정렬 (오래된 것이 위로)
+    // localMessages 먼저, 그 다음 messages (스트리밍 응답)
+    // 각각 timestamp 순으로 정렬 후 합침
+    const sortedLocal = [...localMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const sortedMessages = [...messages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // 두 배열 합치고 전체 정렬
+    const combined = [...sortedLocal, ...sortedMessages];
     return combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, localMessages]);
 
@@ -198,9 +203,10 @@ export default function FloatingChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // 메시지 변경 시 스크롤
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [allMessages]);
 
   useEffect(() => {
     if (isOpen && !isMinimized && inputRef.current) {
@@ -326,9 +332,9 @@ export default function FloatingChat() {
         ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
         : message;
 
-      // 로컬 메시지 제거하고 API 메시지 사용
-      setLocalMessages(prev => prev.filter(m => m !== userMessage));
-      await sendMessage(fullMessage);
+      // API로 fullMessage 전송하되, UI에는 원본 message만 표시
+      // 로컬에 이미 userMessage가 있으므로 skipUserMessage 사용
+      await sendMessage(fullMessage, { skipUserMessage: true });
     }
   };
 
@@ -553,7 +559,11 @@ export default function FloatingChat() {
                         : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 shadow-sm border border-gray-100 dark:border-gray-600 rounded-bl-md'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    {msg.isStreaming && !msg.content ? (
+                      <TypingIndicator />
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    )}
                     {/* 최적 시간 선택 버튼 */}
                     {msg.optimalTimes && msg.optimalTimes.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
@@ -635,7 +645,7 @@ export default function FloatingChat() {
                 </div>
               );
             })}
-            {isLoading && (
+            {isLoading && !allMessages.some(m => m.isStreaming) && (
               <div className="flex justify-start">
                 <div className="bg-white dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-600">
                   <TypingIndicator />

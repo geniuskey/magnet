@@ -36,7 +36,7 @@ async def health_check() -> HealthResponse:
     # Mock 모드에서는 모든 서비스를 connected로 표시
     if settings.use_mock_api:
         services = ServiceStatus(
-            llm="connected" if settings.llm_api_key else "not_configured",
+            llm="connected" if settings.get_api_key() else "not_configured",
             org_api="mock",
             calendar_api="mock",
             room_api="mock",
@@ -45,7 +45,7 @@ async def health_check() -> HealthResponse:
     else:
         # 실제 서비스 연결 상태 확인 (추후 구현)
         services = ServiceStatus(
-            llm="connected" if settings.llm_api_key else "not_configured",
+            llm="connected" if settings.get_api_key() else "not_configured",
             org_api="unknown",
             calendar_api="unknown",
             room_api="unknown",
@@ -78,7 +78,7 @@ async def readiness_check() -> dict:
     서버가 요청을 처리할 준비가 되었는지 확인
     """
     # LLM API 키가 설정되어 있는지 확인
-    if not settings.llm_api_key and not settings.use_mock_api:
+    if not settings.get_api_key() and not settings.use_mock_api:
         return {"status": "not_ready", "reason": "LLM API key not configured"}
 
     return {"status": "ready"}

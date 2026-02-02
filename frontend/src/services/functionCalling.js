@@ -40,6 +40,18 @@ export const FUNCTION_DEFINITIONS = [
     },
   },
   {
+    name: 'addGroupAsAttendees',
+    description: '내 주소록 그룹의 멤버들을 참석자로 추가합니다',
+    parameters: {
+      type: 'object',
+      properties: {
+        groupName: { type: 'string', description: '그룹 이름' },
+        type: { type: 'string', enum: ['REQUIRED', 'OPTIONAL'], description: '참석자 유형' },
+      },
+      required: ['groupName'],
+    },
+  },
+  {
     name: 'setBuildingByName',
     description: '건물을 이름으로 선택합니다',
     parameters: {
@@ -219,8 +231,20 @@ export function parseUserIntent(message, context = {}) {
     }
   }
 
-  // 참석자 추가 패턴
-  if (lowerMsg.includes('참석') || lowerMsg.includes('추가') || lowerMsg.includes('초대')) {
+  // 그룹 추가 패턴
+  if (lowerMsg.includes('그룹') && (lowerMsg.includes('추가') || lowerMsg.includes('참석') || lowerMsg.includes('초대'))) {
+    const groupName = extractGroupName(message, context.myGroups || []);
+    if (groupName) {
+      const isOptional = lowerMsg.includes('선택');
+      functionCalls.push({
+        name: 'addGroupAsAttendees',
+        arguments: { groupName, type: isOptional ? 'OPTIONAL' : 'REQUIRED' },
+      });
+    }
+  }
+
+  // 참석자 추가 패턴 (그룹이 아닌 경우)
+  if (!lowerMsg.includes('그룹') && (lowerMsg.includes('참석') || lowerMsg.includes('추가') || lowerMsg.includes('초대'))) {
     const names = extractNames(message, context.employees || []);
     if (names.length > 0) {
       const isOptional = lowerMsg.includes('선택');
@@ -362,7 +386,12 @@ export function parseUserIntent(message, context = {}) {
 export async function executeFunctions(functionCalls, reservation) {
   const results = [];
 
+  console.group('%c[Function Calls]', 'color: #4CAF50; font-weight: bold;');
+  console.log('Total calls:', functionCalls.length);
+
   for (const call of functionCalls) {
+    console.log(`%c→ ${call.name}`, 'color: #2196F3; font-weight: bold;', call.arguments);
+
     try {
       let result;
       const args = call.arguments;
@@ -378,7 +407,9 @@ export async function executeFunctions(functionCalls, reservation) {
           break;
 
         case 'setParticipantsByNames':
-          result = reservation.setParticipantsByNames(args.names, args.type || 'REQUIRED');
+          // type을 소문자로 변환 (REQUIRED -> required, OPTIONAL -> optional)
+          const attendeeType = (args.type || 'REQUIRED').toLowerCase();
+          result = reservation.setParticipantsByNames(args.names, attendeeType);
           results.push({
             function: call.name,
             success: result.length > 0,
@@ -398,6 +429,29 @@ export async function executeFunctions(functionCalls, reservation) {
               : `"${args.query}" 검색 결과가 없습니다.`,
           });
           break;
+
+        case 'addGroupAsAttendees': {
+          const groupType = (args.type || 'REQUIRED').toLowerCase();
+          const group = reservation.myGroups.find(g =>
+            g.name.includes(args.groupName) || args.groupName.includes(g.name)
+          );
+          if (group) {
+            reservation.addGroupAsAttendees(group.id, groupType);
+            const memberCount = group.members?.length || 0;
+            results.push({
+              function: call.name,
+              success: true,
+              data: `"${group.name}" 그룹의 ${memberCount}명을 ${groupType === 'optional' ? '선택' : '필수'} 참석자로 추가했습니다.`,
+            });
+          } else {
+            results.push({
+              function: call.name,
+              success: false,
+              data: `"${args.groupName}" 그룹을 찾을 수 없습니다. 주소록에서 그룹을 확인해주세요.`,
+            });
+          }
+          break;
+        }
 
         case 'setBuildingByName':
           result = reservation.setBuildingByName(args.name);
@@ -544,6 +598,7 @@ export async function executeFunctions(functionCalls, reservation) {
           });
       }
     } catch (error) {
+      console.error(`%c✗ ${call.name} Error:`, 'color: #f44336;', error.message);
       results.push({
         function: call.name,
         success: false,
@@ -551,6 +606,9 @@ export async function executeFunctions(functionCalls, reservation) {
       });
     }
   }
+
+  console.log('%cResults:', 'color: #FF9800; font-weight: bold;', results);
+  console.groupEnd();
 
   return results;
 }
@@ -567,13 +625,35 @@ export function formatFunctionResults(results) {
 
 // 헬퍼 함수들
 function extractNames(message, employees) {
-  const names = [];
+  const namesSet = new Set();
+
+  // 정확히 일치하는 이름 찾기 (3글자 이름 우선)
   for (const emp of employees) {
     if (message.includes(emp.name)) {
-      names.push(emp.name);
+      namesSet.add(emp.name);
     }
   }
-  return names;
+
+  // 찾지 못했으면 "~님" 패턴으로 이름 추출 시도
+  if (namesSet.size === 0) {
+    const namePatterns = message.match(/([가-힣]{2,4})(?:님|씨|과장|대리|부장|차장|사원|팀장|본부장)?/g);
+    if (namePatterns) {
+      for (const pattern of namePatterns) {
+        const name = pattern.replace(/님|씨|과장|대리|부장|차장|사원|팀장|본부장/g, '');
+        // employees에서 정확 일치 먼저 시도
+        let found = employees.find(emp => emp.name === name);
+        // 없으면 부분 일치
+        if (!found) {
+          found = employees.find(emp => emp.name.includes(name) || name.includes(emp.name));
+        }
+        if (found) {
+          namesSet.add(found.name);
+        }
+      }
+    }
+  }
+
+  return Array.from(namesSet);
 }
 
 function extractTimeRange(message) {
@@ -633,6 +713,29 @@ function extractDate(message) {
 
   const dateMatch = message.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (dateMatch) return dateMatch[0];
+
+  return null;
+}
+
+function extractGroupName(message, groups) {
+  // 정확히 일치하는 그룹 찾기
+  for (const group of groups) {
+    if (message.includes(group.name)) {
+      return group.name;
+    }
+  }
+
+  // "~그룹" 패턴으로 추출 시도
+  const groupMatch = message.match(/["\']?([가-힣A-Za-z0-9\s]+)["\']?\s*그룹/);
+  if (groupMatch) {
+    const name = groupMatch[1].trim();
+    // 부분 일치 검색
+    const found = groups.find(g =>
+      g.name.includes(name) || name.includes(g.name)
+    );
+    if (found) return found.name;
+    return name; // 찾지 못해도 추출한 이름 반환
+  }
 
   return null;
 }

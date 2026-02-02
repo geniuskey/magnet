@@ -130,24 +130,6 @@ const MOCK_BUILDINGS = [
   { id: 'building_c', name: '신관' },
 ];
 
-const MOCK_FLOORS = {
-  building_a: [
-    { id: 'floor_a_1', name: '1층', buildingId: 'building_a' },
-    { id: 'floor_a_2', name: '2층', buildingId: 'building_a' },
-    { id: 'floor_a_3', name: '3층', buildingId: 'building_a' },
-  ],
-  building_b: [
-    { id: 'floor_b_1', name: '1층', buildingId: 'building_b' },
-    { id: 'floor_b_2', name: '2층', buildingId: 'building_b' },
-  ],
-  building_c: [
-    { id: 'floor_c_1', name: '1층', buildingId: 'building_c' },
-    { id: 'floor_c_2', name: '2층', buildingId: 'building_c' },
-    { id: 'floor_c_3', name: '3층', buildingId: 'building_c' },
-    { id: 'floor_c_4', name: '4층', buildingId: 'building_c' },
-  ],
-};
-
 // 편의시설 목록
 const AMENITIES = [
   { id: 'projector', name: '프로젝터' },
@@ -156,41 +138,77 @@ const AMENITIES = [
   { id: 'tv', name: 'TV' },
 ];
 
-const MOCK_ROOMS = {
-  floor_a_1: [
-    { id: 'room_a1_1', name: '회의실 A', capacity: 6, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층', amenities: ['projector', 'whiteboard'] },
-    { id: 'room_a1_2', name: '회의실 B', capacity: 8, floorId: 'floor_a_1', buildingId: 'building_a', buildingName: '본관', floorName: '1층', amenities: ['whiteboard', 'tv'] },
-  ],
-  floor_a_2: [
-    { id: 'room_a2_1', name: '대회의실', capacity: 20, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
-    { id: 'room_a2_2', name: '소회의실 1', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['whiteboard'] },
-    { id: 'room_a2_3', name: '소회의실 2', capacity: 4, floorId: 'floor_a_2', buildingId: 'building_a', buildingName: '본관', floorName: '2층', amenities: ['whiteboard'] },
-  ],
-  floor_a_3: [
-    { id: 'room_a3_1', name: '임원회의실', capacity: 12, floorId: 'floor_a_3', buildingId: 'building_a', buildingName: '본관', floorName: '3층', amenities: ['projector', 'videoConference', 'tv'] },
-  ],
-  floor_b_1: [
-    { id: 'room_b1_1', name: '미팅룸 1', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층', amenities: ['whiteboard'] },
-    { id: 'room_b1_2', name: '미팅룸 2', capacity: 6, floorId: 'floor_b_1', buildingId: 'building_b', buildingName: '별관', floorName: '1층', amenities: ['projector', 'whiteboard'] },
-  ],
-  floor_b_2: [
-    { id: 'room_b2_1', name: '세미나실', capacity: 30, floorId: 'floor_b_2', buildingId: 'building_b', buildingName: '별관', floorName: '2층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
-  ],
-  floor_c_1: [
-    { id: 'room_c1_1', name: '상담실 1', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층', amenities: [] },
-    { id: 'room_c1_2', name: '상담실 2', capacity: 4, floorId: 'floor_c_1', buildingId: 'building_c', buildingName: '신관', floorName: '1층', amenities: [] },
-  ],
-  floor_c_2: [
-    { id: 'room_c2_1', name: '프로젝트룸 A', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층', amenities: ['projector', 'whiteboard', 'tv'] },
-    { id: 'room_c2_2', name: '프로젝트룸 B', capacity: 8, floorId: 'floor_c_2', buildingId: 'building_c', buildingName: '신관', floorName: '2층', amenities: ['whiteboard', 'videoConference'] },
-  ],
-  floor_c_3: [
-    { id: 'room_c3_1', name: '교육장', capacity: 40, floorId: 'floor_c_3', buildingId: 'building_c', buildingName: '신관', floorName: '3층', amenities: ['projector', 'whiteboard', 'videoConference', 'tv'] },
-  ],
-  floor_c_4: [
-    { id: 'room_c4_1', name: '스튜디오', capacity: 10, floorId: 'floor_c_4', buildingId: 'building_c', buildingName: '신관', floorName: '4층', amenities: ['projector', 'videoConference', 'tv'] },
-  ],
+// 회의실 이름 프리픽스
+const ROOM_PREFIXES = ['회의실', '미팅룸', '소회의실', '대회의실', '세미나실', '프로젝트룸', '스튜디오'];
+const ROOM_SUFFIXES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const CAPACITIES = [4, 6, 8, 10, 12, 15, 20, 30];
+
+// 층 데이터 생성 (각 건물 10층)
+const generateFloors = () => {
+  const floors = {};
+  MOCK_BUILDINGS.forEach(building => {
+    floors[building.id] = [];
+    for (let i = 1; i <= 10; i++) {
+      floors[building.id].push({
+        id: `floor_${building.id}_${i}`,
+        name: `${i}층`,
+        buildingId: building.id,
+      });
+    }
+  });
+  return floors;
 };
+
+const MOCK_FLOORS = generateFloors();
+
+// 회의실 데이터 생성 (각 층 4~8개)
+const generateRooms = () => {
+  const rooms = {};
+  const seededRandom = (seed) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+
+  let seed = 12345;
+  const nextRandom = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+
+  MOCK_BUILDINGS.forEach(building => {
+    MOCK_FLOORS[building.id].forEach((floor, floorIdx) => {
+      const floorId = floor.id;
+      const roomCount = 4 + Math.floor(nextRandom() * 5); // 4~8개
+      rooms[floorId] = [];
+
+      for (let i = 0; i < roomCount; i++) {
+        const prefix = ROOM_PREFIXES[Math.floor(nextRandom() * ROOM_PREFIXES.length)];
+        const suffix = ROOM_SUFFIXES[i];
+        const capacity = CAPACITIES[Math.floor(nextRandom() * CAPACITIES.length)];
+
+        // 랜덤 편의시설 (0~4개)
+        const amenityCount = Math.floor(nextRandom() * 5);
+        const amenityIds = ['projector', 'whiteboard', 'videoConference', 'tv'];
+        const shuffled = amenityIds.sort(() => nextRandom() - 0.5);
+        const roomAmenities = shuffled.slice(0, amenityCount);
+
+        rooms[floorId].push({
+          id: `room_${building.id}_${floorIdx + 1}_${i + 1}`,
+          name: `${prefix} ${suffix}`,
+          capacity,
+          floorId,
+          buildingId: building.id,
+          buildingName: building.name,
+          floorName: floor.name,
+          amenities: roomAmenities,
+        });
+      }
+    });
+  });
+  return rooms;
+};
+
+const MOCK_ROOMS = generateRooms();
 
 const ALL_ROOMS = Object.values(MOCK_ROOMS).flat();
 
@@ -257,9 +275,9 @@ const loadPreferences = () => {
   }
 };
 
-const savePreferences = (buildingId, floorId) => {
+const savePreferences = (buildingId, floorIds) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ buildingId, floorId }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ buildingId, floorIds }));
   } catch (e) {}
 };
 
@@ -399,8 +417,15 @@ export function ReservationProvider({ children }) {
       const building = MOCK_BUILDINGS.find(b => b.id === prefs.buildingId);
       if (building) {
         setSelectedBuilding(building);
-        if (prefs.floorId) {
-          const floorList = MOCK_FLOORS[building.id] || [];
+        // 멀티플로어 지원 (floorIds 배열) + 하위 호환 (floorId 단일)
+        const floorList = MOCK_FLOORS[building.id] || [];
+        if (prefs.floorIds && Array.isArray(prefs.floorIds)) {
+          const validFloorIds = prefs.floorIds.filter(fid => floorList.some(f => f.id === fid));
+          if (validFloorIds.length > 0) {
+            setSelectedFloors(new Set(validFloorIds));
+          }
+        } else if (prefs.floorId) {
+          // 하위 호환: 단일 floorId
           const floor = floorList.find(f => f.id === prefs.floorId);
           if (floor) setSelectedFloors(new Set([floor.id]));
         }
@@ -678,16 +703,17 @@ export function ReservationProvider({ children }) {
     setSelectedFloors(new Set());
     setSelectedRoom(null);
     setSelectedTimeSlots([]);
-    if (building) savePreferences(building.id, null);
+    if (building) savePreferences(building.id, []);
   }, []);
 
   // 단일 층 선택 (하위 호환성)
   const selectFloor = useCallback((floor) => {
     if (floor) {
       setSelectedFloors(new Set([floor.id]));
-      if (selectedBuilding) savePreferences(selectedBuilding.id, floor.id);
+      if (selectedBuilding) savePreferences(selectedBuilding.id, [floor.id]);
     } else {
       setSelectedFloors(new Set());
+      if (selectedBuilding) savePreferences(selectedBuilding.id, []);
     }
     setSelectedRoom(null);
     setSelectedTimeSlots([]);
@@ -705,11 +731,15 @@ export function ReservationProvider({ children }) {
         }
         next.add(floor.id);
       }
+      // 변경된 층 목록 저장
+      if (selectedBuilding) {
+        savePreferences(selectedBuilding.id, Array.from(next));
+      }
       return next;
     });
     setSelectedRoom(null);
     setSelectedTimeSlots([]);
-  }, []);
+  }, [selectedBuilding]);
 
   const toggleTimeSlot = useCallback((roomId, timeSlot) => {
     if (reservations[roomId]?.[timeSlot]) return;
@@ -1139,25 +1169,46 @@ export function ReservationProvider({ children }) {
 
   // LLM 제어용 함수들
   const setParticipantsByNames = useCallback((names, type = ATTENDEE_TYPES.REQUIRED) => {
+    console.log('%c[setParticipantsByNames]', 'color: #9C27B0; font-weight: bold;', { names, type });
+
     const newParticipants = employees.filter(e =>
       names.some(name => e.name.includes(name) || name.includes(e.name))
     );
-    // 기존 참석자에 추가 (중복 제거)
-    if (type === ATTENDEE_TYPES.REQUIRED) {
-      setRequiredAttendees(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        const toAdd = newParticipants.filter(p => !existingIds.has(p.id));
-        return [...prev, ...toAdd];
-      });
-    } else if (type === ATTENDEE_TYPES.OPTIONAL) {
-      setOptionalAttendees(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        const toAdd = newParticipants.filter(p => !existingIds.has(p.id));
-        return [...prev, ...toAdd];
-      });
+    console.log('  Found participants:', newParticipants.map(p => p.name));
+
+    // 기존 참석자에 추가 (중복 제거) + selectedEntities도 함께 업데이트
+    const existingIds = new Set([
+      organizer?.id,
+      ...requiredAttendees.map(p => p.id),
+      ...optionalAttendees.map(p => p.id),
+    ].filter(Boolean));
+
+    const toAdd = newParticipants.filter(p => !existingIds.has(p.id));
+    console.log('  To add (after dedup):', toAdd.map(p => p.name));
+
+    if (toAdd.length > 0) {
+      // selectedEntities에 개인 추가
+      const newEntities = toAdd.map(emp => ({
+        type: SELECTION_TYPES.INDIVIDUAL,
+        id: emp.id,
+        name: emp.name,
+        attendeeType: type,
+        memberIds: [emp.id],
+        memberCount: 1,
+        department: emp.department,
+      }));
+      setSelectedEntities(prev => [...prev, ...newEntities]);
+
+      // 참석자 목록에 추가
+      if (type === ATTENDEE_TYPES.REQUIRED) {
+        setRequiredAttendees(prev => [...prev, ...toAdd]);
+      } else if (type === ATTENDEE_TYPES.OPTIONAL) {
+        setOptionalAttendees(prev => [...prev, ...toAdd]);
+      }
     }
+
     return newParticipants;
-  }, [employees]);
+  }, [employees, organizer, requiredAttendees, optionalAttendees]);
 
   const setBuildingByName = useCallback((name) => {
     const building = buildings.find(b => b.name.includes(name) || name.includes(b.name));
@@ -1174,18 +1225,22 @@ export function ReservationProvider({ children }) {
       targetBuilding = buildings.find(b => b.name.includes(buildingName));
       if (targetBuilding && targetBuilding.id !== selectedBuilding?.id) {
         setSelectedBuilding(targetBuilding);
+        savePreferences(targetBuilding.id, []);
       }
     }
     if (targetBuilding) {
       const floorList = MOCK_FLOORS[targetBuilding.id] || [];
       const floor = floorList.find(f => f.name.includes(floorName) || floorName.includes(f.name));
       if (floor) {
-        selectFloor(floor);
+        setSelectedFloors(new Set([floor.id]));
+        savePreferences(targetBuilding.id, [floor.id]);
+        setSelectedRoom(null);
+        setSelectedTimeSlots([]);
         return floor;
       }
     }
     return null;
-  }, [selectedBuilding, buildings, selectFloor]);
+  }, [selectedBuilding, buildings]);
 
   const setRoomByName = useCallback((roomName) => {
     const room = allRooms.find(r => r.name.includes(roomName) || roomName.includes(r.name));
@@ -1193,7 +1248,10 @@ export function ReservationProvider({ children }) {
       const building = buildings.find(b => b.id === room.buildingId);
       const floor = MOCK_FLOORS[room.buildingId]?.find(f => f.id === room.floorId);
       if (building) setSelectedBuilding(building);
-      if (floor) setSelectedFloor(floor);
+      if (floor) {
+        setSelectedFloors(new Set([floor.id]));
+        if (building) savePreferences(building.id, [floor.id]);
+      }
       setSelectedRoom(room.id);
       return room;
     }
@@ -1234,10 +1292,32 @@ export function ReservationProvider({ children }) {
       // 기존 주관자가 있으면 필수 참석자로 변경
       if (organizer) {
         setRequiredAttendees(prev => [...prev.filter(a => a.id !== organizer.id), organizer]);
+        // 기존 주관자 entity를 필수 참석자로 변경
+        setSelectedEntities(prev => prev.map(e =>
+          e.type === SELECTION_TYPES.INDIVIDUAL && e.id === organizer.id
+            ? { ...e, attendeeType: ATTENDEE_TYPES.REQUIRED }
+            : e
+        ));
       }
+
       // 새 주관자가 이미 참석자 목록에 있으면 제거
       setRequiredAttendees(prev => prev.filter(a => a.id !== employee.id));
       setOptionalAttendees(prev => prev.filter(a => a.id !== employee.id));
+
+      // selectedEntities에서 기존 entity 제거 후 주관자로 추가
+      setSelectedEntities(prev => {
+        const filtered = prev.filter(e => !(e.type === SELECTION_TYPES.INDIVIDUAL && e.id === employee.id));
+        return [...filtered, {
+          type: SELECTION_TYPES.INDIVIDUAL,
+          id: employee.id,
+          name: employee.name,
+          attendeeType: ATTENDEE_TYPES.ORGANIZER,
+          memberIds: [employee.id],
+          memberCount: 1,
+          department: employee.department,
+        }];
+      });
+
       setOrganizer(employee);
       return employee;
     }

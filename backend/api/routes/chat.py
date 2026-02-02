@@ -1,8 +1,10 @@
 """채팅 엔드포인트"""
 
 import uuid
+import json
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
+from fastapi.responses import StreamingResponse
+from typing import Optional, AsyncGenerator
 
 from models.chat import (
     ChatRequest,
@@ -89,6 +91,56 @@ async def chat(
             ),
             status=ChatStatus.ERROR,
         )
+
+
+@router.post("/stream")
+async def chat_stream(
+    request: ChatRequest,
+    meeting_agent: MeetingAgent = Depends(get_agent),
+):
+    """
+    스트리밍 채팅 메시지 처리 (SSE)
+    """
+    async def generate() -> AsyncGenerator[str, None]:
+        try:
+            # 대화 조회 또는 생성
+            conversation = get_or_create_conversation(request.conversation_id)
+
+            # 사용자 메시지 추가
+            conversation.add_message("user", request.message)
+
+            # conversation_id 먼저 전송
+            yield f"data: {json.dumps({'type': 'start', 'conversation_id': conversation.id})}\n\n"
+
+            # Agent 스트리밍 처리
+            full_content = ""
+            async for chunk in meeting_agent.process_stream(request.message, conversation):
+                if chunk.get("type") == "content":
+                    full_content += chunk.get("text", "")
+                    yield f"data: {json.dumps({'type': 'content', 'text': chunk.get('text', '')})}\n\n"
+                elif chunk.get("type") == "tool_call":
+                    yield f"data: {json.dumps({'type': 'tool_call', 'name': chunk.get('name'), 'status': chunk.get('status')})}\n\n"
+
+            # 응답 메시지 추가
+            if full_content:
+                conversation.add_message("assistant", full_content)
+
+            # 완료 이벤트
+            yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation.id})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Chat stream error: {str(e)}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': '죄송합니다, 요청을 처리하는 중 오류가 발생했습니다.'})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/conversation/{conversation_id}")
