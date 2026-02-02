@@ -198,10 +198,20 @@ export function parseUserIntent(message, context = {}) {
   const functionCalls = [];
 
   // 예약 생성 패턴
-  const reservationPattern = /(.+?)[과와,]\s*(.+?)[과와]?\s*(내일|오늘|모레|\d{4}-\d{2}-\d{2}|다음\s*주)?\s*(오전|오후)?\s*(\d{1,2})시?\s*[~\-부터에]?\s*(오전|오후)?\s*(\d{1,2})시?.*?(회의실|대회의실|소회의실|룸)/;
+  const reservationPattern = /(.+?)[과와,]\s*(.+?)[과와]?\s*(내일|오늘|모레|\d{4}-\d{2}-\d{2}|다음\s*주)?\s*(오전|오후)?\s*(\d{1,2})시?\s*[~\-부터에]?\s*(오전|오후)?\s*(\d{1,2})시?.*?(회의실|대회의실|소회의실|세미나실|룸)/;
   const quickReservationMatch = message.match(reservationPattern);
 
-  if (quickReservationMatch || lowerMsg.includes('예약') && lowerMsg.includes('해줘')) {
+  // "예약" 키워드가 있으면 예약 시도 (회의실+시간, 또는 해줘 포함)
+  const hasReservationIntent = lowerMsg.includes('예약') && (
+    lowerMsg.includes('해줘') ||
+    lowerMsg.includes('해 줘') ||
+    lowerMsg.includes('할게') ||
+    lowerMsg.includes('하고 싶') ||
+    /(회의실|세미나실|강의실|룸).*(오전|오후|\d+시)/.test(message) ||
+    /(오전|오후|\d+시).*(회의실|세미나실|강의실|룸)/.test(message)
+  );
+
+  if (quickReservationMatch || hasReservationIntent) {
     // 참석자 이름 추출
     const names = extractNames(message, context.employees || []);
 
@@ -699,6 +709,25 @@ function extractTimeRange(message) {
       };
     }
   }
+
+  // 단일 시간 패턴 (오전/오후 10시 -> 1시간 회의로 가정)
+  const singleTimePattern = /(오전|오후)?\s*(\d{1,2})시/;
+  const singleMatch = message.match(singleTimePattern);
+  if (singleMatch) {
+    let startHour = parseInt(singleMatch[2]);
+    if (singleMatch[1] === '오후' && startHour < 12) startHour += 12;
+    if (singleMatch[1] === '오전' && startHour === 12) startHour = 0;
+    // 오전/오후 명시 없으면 업무시간 기준 추정
+    if (!singleMatch[1] && startHour >= 1 && startHour <= 6) startHour += 12;
+
+    const endHour = startHour + 1; // 1시간 회의 기본값
+
+    return {
+      startTime: `${startHour.toString().padStart(2, '0')}:00`,
+      endTime: `${endHour.toString().padStart(2, '0')}:00`,
+    };
+  }
+
   return null;
 }
 
@@ -747,9 +776,18 @@ function extractRoom(message, rooms) {
     }
   }
 
-  // 일반적인 회의실 패턴
-  const roomMatch = message.match(/(대?회의실\s*[A-Za-z가-힣0-9]+|[A-Za-z가-힣]+\s*룸)/);
-  if (roomMatch) return roomMatch[1];
+  // 일반적인 회의실/세미나실 패턴
+  const roomPatterns = [
+    /(대?회의실\s*[A-Za-z가-힣0-9]+)/,
+    /(세미나실\s*[A-Za-z가-힣0-9]+)/,
+    /(강의실\s*[A-Za-z가-힣0-9]+)/,
+    /([A-Za-z가-힣]+\s*룸)/,
+  ];
+
+  for (const pattern of roomPatterns) {
+    const match = message.match(pattern);
+    if (match) return match[1];
+  }
 
   return null;
 }

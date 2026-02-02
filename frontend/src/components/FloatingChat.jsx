@@ -129,39 +129,71 @@ export default function FloatingChat() {
     allRooms: reservation.allRooms,
   }), [reservation.buildings, reservation.employees, reservation.allRooms]);
 
-  // 액션 적용 핸들러
+  // 액션 적용 핸들러 (토글 방식)
   const handleApplyAction = useCallback((action, msgIdx) => {
     const key = `${msgIdx}_${action.type}_${action.label}`;
-    if (appliedActions.has(key)) return;
+    const isApplied = appliedActions.has(key);
 
-    switch (action.type) {
-      case 'building':
-        reservation.setBuildingByName(action.data.name);
-        break;
-      case 'floor':
-        const floorNum = action.data.replace('층', '');
-        reservation.setFloorByName(`${floorNum}층`);
-        break;
-      case 'room':
-        reservation.setRoomByName(action.data.name);
-        break;
-      case 'participant':
-        reservation.toggleParticipant(action.data);
-        break;
-      case 'time':
-        if (reservation.selectedRoom) {
-          reservation.setTimeByRange(action.data.startTime, action.data.endTime);
-        }
-        break;
+    if (isApplied) {
+      // 적용 해제
+      switch (action.type) {
+        case 'building':
+          // 건물은 해제 불가 (다른 건물 선택으로만 변경)
+          return;
+        case 'floor':
+          // 층 선택 해제 (toggleFloor 사용)
+          const floorToRemove = reservation.floors.find(f => f.name.includes(action.data.replace('층', '')));
+          if (floorToRemove) {
+            reservation.toggleFloor(floorToRemove);
+          }
+          break;
+        case 'room':
+          // 회의실 선택 해제
+          reservation.clearSelection();
+          break;
+        case 'participant':
+          // 참석자 해제 (토글)
+          reservation.toggleParticipant(action.data);
+          break;
+        case 'time':
+          // 시간 선택 해제
+          reservation.clearSelection();
+          break;
+      }
+      setAppliedActions(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    } else {
+      // 적용
+      switch (action.type) {
+        case 'building':
+          reservation.setBuildingByName(action.data.name);
+          break;
+        case 'floor':
+          const floorNum = action.data.replace('층', '');
+          reservation.setFloorByName(`${floorNum}층`);
+          break;
+        case 'room':
+          reservation.setRoomByName(action.data.name);
+          break;
+        case 'participant':
+          reservation.toggleParticipant(action.data);
+          break;
+        case 'time':
+          if (reservation.selectedRoom) {
+            reservation.setTimeByRange(action.data.startTime, action.data.endTime);
+          }
+          break;
+      }
+      setAppliedActions(prev => new Set([...prev, key]));
     }
-
-    setAppliedActions(prev => new Set([...prev, key]));
   }, [reservation, appliedActions]);
 
   // 최적 시간 찾기
   const handleFindOptimalTimes = useCallback(() => {
-    const participantIds = reservation.selectedParticipants.map(p => p.id);
-    const optimalTimes = reservation.findOptimalTimes(participantIds, reservation.selectedDate, 60);
+    const optimalTimes = reservation.findOptimalTimes(60);
 
     if (optimalTimes.length === 0) {
       const noTimeMsg = {
@@ -623,16 +655,20 @@ export default function FloatingChat() {
                           {actions.map((action, actionIdx) => {
                             const key = `${idx}_${action.type}_${action.label}`;
                             const isApplied = appliedActions.has(key);
+                            const canToggle = action.type !== 'building'; // 건물은 해제 불가
                             return (
                               <button
                                 key={actionIdx}
                                 onClick={() => handleApplyAction(action, idx)}
-                                disabled={isApplied}
+                                disabled={isApplied && !canToggle}
                                 className={`px-2 py-1 text-xs rounded-full transition-colors ${
                                   isApplied
-                                    ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-default'
+                                    ? canToggle
+                                      ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-red-100 dark:hover:bg-red-900 hover:text-red-700 dark:hover:text-red-300'
+                                      : 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-default'
                                     : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800'
                                 }`}
+                                title={isApplied && canToggle ? '클릭하여 해제' : ''}
                               >
                                 {isApplied ? '✓ ' : ''}{action.label}
                               </button>

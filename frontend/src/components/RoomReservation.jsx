@@ -24,7 +24,9 @@ export default function RoomReservation() {
     selectedParticipants,
     employeeSchedules,
     showAvailability,
+    setShowAvailability,
     meetingDuration,
+    setMeetingDuration,
     roomFilters,
     selectBuilding,
     toggleFloor,
@@ -34,6 +36,8 @@ export default function RoomReservation() {
     findOptimalTimes,
     moveReservation,
     setRoomFilters,
+    scrollTargetTime,
+    clearScrollTarget,
   } = useReservation();
 
   const { isDark, toggleTheme } = useTheme();
@@ -134,6 +138,27 @@ export default function RoomReservation() {
       const endIdx = timeSlots.findIndex(s => s >= endTime);
       const lastSlot = endIdx > 0 ? timeSlots[endIdx - 1] : timeSlots[timeSlots.length - 1];
       selectTimeRange(roomId, startTime, lastSlot);
+
+      // 해당 시간대가 중앙에 오도록 스크롤 (DOM 업데이트 후 실행)
+      requestAnimationFrame(() => {
+        const container = scrollContainerRef.current;
+        if (container) {
+          const startIdx = timeSlots.indexOf(startTime);
+          const slotWidth = 20; // w-5 = 20px
+          const roomNameWidth = 128; // w-32 = 128px
+          const containerWidth = container.clientWidth;
+
+          // 선택된 시간대의 중앙 위치 계산
+          const selectionCenter = startIdx * slotWidth + ((endIdx - startIdx) * slotWidth) / 2;
+          // 컨테이너 중앙에 오도록 스크롤 위치 계산 (room name 영역 고려)
+          const scrollTarget = selectionCenter - (containerWidth - roomNameWidth) / 2;
+
+          container.scrollTo({
+            left: Math.max(0, scrollTarget),
+            behavior: 'smooth'
+          });
+        }
+      });
     }
   };
 
@@ -734,6 +759,35 @@ export default function RoomReservation() {
     }
   }, [resizingReservation, handleReservationResizeEnd]);
 
+  // scrollTargetTime이 설정되면 해당 시간으로 스크롤
+  useEffect(() => {
+    if (scrollTargetTime && scrollContainerRef.current) {
+      const { startTime, endTime } = scrollTargetTime;
+      const startIdx = timeSlots.indexOf(startTime);
+      const endIdx = timeSlots.findIndex(s => s >= endTime);
+
+      if (startIdx >= 0) {
+        const slotWidth = 20; // w-5 = 20px
+        const roomNameWidth = 128; // w-32 = 128px
+        const container = scrollContainerRef.current;
+        const containerWidth = container.clientWidth;
+
+        // 선택된 시간대의 중앙 위치 계산
+        const selectionCenter = startIdx * slotWidth + ((endIdx - startIdx) * slotWidth) / 2;
+        // 컨테이너 중앙에 오도록 스크롤 위치 계산
+        const scrollTarget = selectionCenter - (containerWidth - roomNameWidth) / 2;
+
+        container.scrollTo({
+          left: Math.max(0, scrollTarget),
+          behavior: 'smooth'
+        });
+      }
+
+      // 스크롤 후 초기화
+      clearScrollTarget();
+    }
+  }, [scrollTargetTime, timeSlots, clearScrollTarget]);
+
   // 예약 리사이즈 미리보기 범위 계산
   const getReservationResizePreview = (roomId) => {
     if (!resizingReservation || resizingReservation.roomId !== roomId || resizePreviewSlot === null) return null;
@@ -916,7 +970,7 @@ export default function RoomReservation() {
 
         {/* 회의실 필터 영역 */}
         {selectedFloors.size > 0 && (
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-4 mt-3">
             {/* 이름 검색 */}
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">검색:</label>
@@ -982,6 +1036,69 @@ export default function RoomReservation() {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* 참석자 가용시간 & 추천 시간 */}
+        {selectedParticipants.length > 0 && (
+          <div className="flex items-center gap-6 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            {/* 바쁜 시간 표시 토글 */}
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAvailability}
+                onChange={(e) => setShowAvailability(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+              />
+              바쁜 시간 표시
+            </label>
+
+            {/* 회의 시간 선택 */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">회의 시간:</span>
+              <select
+                value={meetingDuration}
+                onChange={(e) => setMeetingDuration(Number(e.target.value))}
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value={30}>30분</option>
+                <option value={60}>1시간</option>
+                <option value={90}>1시간 30분</option>
+                <option value={120}>2시간</option>
+              </select>
+            </div>
+
+            {/* 추천 시간 */}
+            {optimalTimes.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 dark:text-gray-400">추천 시간:</span>
+                <div className="flex gap-1">
+                  {optimalTimes.slice(0, 5).map((time, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        if (time.availableRooms.length > 0) {
+                          applyOptimalTime(time.startTime, time.endTime, time.availableRooms[0].id);
+                        }
+                      }}
+                      className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+                        time.isAllRequiredAvailable
+                          ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800'
+                          : 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-800'
+                      }`}
+                      title={`${time.isAllRequiredAvailable ? '전원 가능' : `${time.requiredScore}명 가능`} · ${time.availableRooms.length}개 회의실`}
+                    >
+                      {time.startTime}~{time.endTime}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {optimalTimes.length === 0 && (
+              <span className="text-sm text-gray-400 dark:text-gray-500">
+                {meetingDuration}분 회의 가능한 시간/회의실 없음
+              </span>
+            )}
           </div>
         )}
       </header>

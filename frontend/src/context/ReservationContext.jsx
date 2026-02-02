@@ -75,31 +75,40 @@ const generateMyGroups = (employees) => {
 
 const MOCK_MY_GROUPS = generateMyGroups(MOCK_EMPLOYEES);
 
-// 직원별 바쁜 시간대 생성 (랜덤)
-const generateEmployeeSchedules = (employees) => {
+// 직원별 바쁜 시간대 생성 (랜덤) - 날짜를 인자로 받음
+const generateEmployeeSchedules = (employees, targetDate) => {
   const schedules = {};
-  const today = new Date().toISOString().split('T')[0];
   const meetingTitles = ['팀 미팅', '1:1 면담', '코드 리뷰', '설계 검토', '스프린트 계획', '기획 회의', '디자인 리뷰', '고객 미팅', '교육', '워크샵'];
 
-  employees.forEach(emp => {
+  // 날짜를 시드로 사용하여 같은 날짜면 같은 스케줄 생성
+  const dateSeed = targetDate.split('-').join('');
+
+  employees.forEach((emp, empIdx) => {
+    // 시드 기반 의사 난수 (날짜+직원ID 조합)
+    const seed = parseInt(dateSeed) + empIdx * 1000;
+    const seededRandom = (n) => {
+      const x = Math.sin(seed + n) * 10000;
+      return x - Math.floor(x);
+    };
+
     // 30% 확률로 일정 생성
-    if (Math.random() < 0.3) {
-      const numMeetings = Math.floor(Math.random() * 3) + 1;
+    if (seededRandom(0) < 0.3) {
+      const numMeetings = Math.floor(seededRandom(1) * 3) + 1;
       schedules[emp.id] = [];
 
       for (let i = 0; i < numMeetings; i++) {
-        const startHour = 9 + Math.floor(Math.random() * 8);
-        const duration = [30, 60, 90, 120][Math.floor(Math.random() * 4)];
+        const startHour = 9 + Math.floor(seededRandom(i * 10 + 2) * 8);
+        const duration = [30, 60, 90, 120][Math.floor(seededRandom(i * 10 + 3) * 4)];
         const startTime = `${startHour.toString().padStart(2, '0')}:00`;
         const endHour = startHour + Math.floor(duration / 60);
         const endMin = duration % 60;
         const endTime = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
 
         schedules[emp.id].push({
-          date: today,
+          date: targetDate,
           startTime,
           endTime,
-          title: meetingTitles[Math.floor(Math.random() * meetingTitles.length)],
+          title: meetingTitles[Math.floor(seededRandom(i * 10 + 4) * meetingTitles.length)],
         });
       }
     }
@@ -108,7 +117,14 @@ const generateEmployeeSchedules = (employees) => {
   return schedules;
 };
 
-const MOCK_EMPLOYEE_SCHEDULES = generateEmployeeSchedules(MOCK_EMPLOYEES);
+// 현재 날짜 가져오기 함수 (로컬 타임존 기준)
+const getCurrentDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // 참석자 유형
 const ATTENDEE_TYPES = {
@@ -317,7 +333,7 @@ export function ReservationProvider({ children }) {
 
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedFloors, setSelectedFloors] = useState(new Set());
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => getCurrentDate());
 
   // 회의실 필터 상태
   const [roomFilters, setRoomFilters] = useState({
@@ -336,13 +352,17 @@ export function ReservationProvider({ children }) {
   const [showMyReservations, setShowMyReservations] = useState(false);
   const [showAvailability, setShowAvailability] = useState(true);
   const [meetingDuration, setMeetingDuration] = useState(60);
+  const [scrollTargetTime, setScrollTargetTime] = useState(null); // { startTime, endTime } - 스크롤 대상 시간
 
   // 검색/필터 상태
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState(null);
 
   const employees = MOCK_EMPLOYEES;
-  const employeeSchedules = MOCK_EMPLOYEE_SCHEDULES;
+  // 선택된 날짜에 맞는 직원 스케줄 생성 (날짜 변경 시 재생성)
+  const employeeSchedules = useMemo(() => {
+    return generateEmployeeSchedules(MOCK_EMPLOYEES, selectedDate);
+  }, [selectedDate]);
   const teams = MOCK_TEAMS;
   const myGroups = MOCK_MY_GROUPS;
   const buildings = MOCK_BUILDINGS;
@@ -1278,6 +1298,8 @@ export function ReservationProvider({ children }) {
     if (newSlots.length > 0) {
       setSelectedRoom(targetRoomId);
       setSelectedTimeSlots(newSlots);
+      // 스크롤 대상 시간 설정
+      setScrollTargetTime({ startTime, endTime });
       return true;
     }
     return false;
@@ -1637,6 +1659,8 @@ export function ReservationProvider({ children }) {
     showMyReservations,
     showAvailability,
     meetingDuration,
+    scrollTargetTime,
+    clearScrollTarget: () => setScrollTargetTime(null),
     employeeSearchQuery,
     selectedTeamFilter,
     roomFilters,
