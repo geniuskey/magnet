@@ -1280,12 +1280,18 @@ export function ReservationProvider({ children }) {
 
   const setTimeByRange = useCallback((startTime, endTime, roomId) => {
     const targetRoomId = roomId || selectedRoom;
-    if (!targetRoomId) return false;
+    if (!targetRoomId) return null;
 
     const startIdx = TIME_SLOTS.indexOf(startTime);
-    const endIdx = TIME_SLOTS.findIndex(s => s === endTime) - 1;
+    // endTime이 슬롯에 정확히 없으면 endTime 이상인 첫 슬롯 찾기
+    let endIdx = TIME_SLOTS.findIndex(s => s === endTime);
+    if (endIdx === -1) {
+      // endTime보다 크거나 같은 첫 슬롯 찾기
+      endIdx = TIME_SLOTS.findIndex(s => s >= endTime);
+    }
+    endIdx = endIdx - 1; // endTime 직전 슬롯까지 선택
 
-    if (startIdx === -1 || endIdx < startIdx) return false;
+    if (startIdx === -1 || endIdx < startIdx) return null;
 
     const newSlots = [];
     for (let i = startIdx; i <= endIdx; i++) {
@@ -1300,9 +1306,9 @@ export function ReservationProvider({ children }) {
       setSelectedTimeSlots(newSlots);
       // 스크롤 대상 시간 설정
       setScrollTargetTime({ startTime, endTime });
-      return true;
+      return newSlots; // 슬롯 배열 반환
     }
-    return false;
+    return null;
   }, [selectedRoom, reservations]);
 
   // 주관자 설정 (이름으로)
@@ -1481,10 +1487,11 @@ export function ReservationProvider({ children }) {
       if (!targetRoom) return { success: false, error: `회의실 "${roomName}" 찾을 수 없음` };
     }
 
-    // 4. 시간 설정
+    // 4. 시간 설정 및 슬롯 가져오기
+    let timeSlots = null;
     if (startTime && endTime && targetRoom) {
-      const timeSet = setTimeByRange(startTime, endTime, targetRoom.id);
-      if (!timeSet) return { success: false, error: '해당 시간은 이미 예약됨' };
+      timeSlots = setTimeByRange(startTime, endTime, targetRoom.id);
+      if (!timeSlots) return { success: false, error: '해당 시간은 이미 예약됨' };
     }
 
     // 5. 반복 설정
@@ -1500,8 +1507,12 @@ export function ReservationProvider({ children }) {
       setMeetingTitle(title);
     }
 
-    // 7. 예약 생성
-    const result = await createReservation();
+    // 7. 예약 생성 (슬롯을 직접 전달하여 state 동기화 문제 해결)
+    const result = await createReservation({
+      title: title || '회의',
+      roomId: targetRoom?.id,
+      slots: timeSlots,
+    });
     return result;
   }, [setDateByString, setOrganizerByName, setParticipantsByNames, setRoomByName, setTimeByRange, setRecurrence, setRecurrenceEndDate, setMeetingTitle, createReservation]);
 
