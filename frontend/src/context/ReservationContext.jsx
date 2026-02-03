@@ -5,6 +5,7 @@ const ReservationContext = createContext(null);
 const STORAGE_KEY = 'meeting_scheduler_preferences';
 const MY_RESERVATIONS_KEY = 'my_reservations';
 const FAVORITE_ROOMS_KEY = 'favorite_rooms';
+const HIDDEN_ROOMS_KEY = 'hidden_rooms';
 
 // 한국 이름 생성용 데이터
 const LAST_NAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '류', '홍'];
@@ -331,6 +332,21 @@ const saveFavoriteRooms = (favoriteRooms) => {
   } catch (e) {}
 };
 
+const loadHiddenRooms = () => {
+  try {
+    const saved = localStorage.getItem(HIDDEN_ROOMS_KEY);
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch (e) {
+    return new Set();
+  }
+};
+
+const saveHiddenRooms = (hiddenRooms) => {
+  try {
+    localStorage.setItem(HIDDEN_ROOMS_KEY, JSON.stringify([...hiddenRooms]));
+  } catch (e) {}
+};
+
 // 반복 패턴
 const RECURRENCE_TYPES = {
   NONE: 'none',
@@ -374,6 +390,7 @@ export function ReservationProvider({ children }) {
   const [scrollTargetTime, setScrollTargetTime] = useState(null); // { startTime, endTime } - 스크롤 대상 시간
   const [timeSlotInterval, setTimeSlotInterval] = useState(60); // 10, 30, 60분 (default: 1시간)
   const [favoriteRooms, setFavoriteRooms] = useState(() => loadFavoriteRooms());
+  const [hiddenRooms, setHiddenRooms] = useState(() => loadHiddenRooms());
 
   // 검색/필터 상태
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
@@ -504,6 +521,26 @@ export function ReservationProvider({ children }) {
   // 즐겨찾기 토글
   const toggleFavoriteRoom = useCallback((roomId) => {
     setFavoriteRooms(prev => {
+      const next = new Set(prev);
+      if (next.has(roomId)) {
+        next.delete(roomId);
+      } else {
+        next.add(roomId);
+      }
+      return next;
+    });
+  }, []);
+
+  // 숨김 저장
+  useEffect(() => {
+    if (isInitialized) {
+      saveHiddenRooms(hiddenRooms);
+    }
+  }, [hiddenRooms, isInitialized]);
+
+  // 숨김 토글
+  const toggleHiddenRoom = useCallback((roomId) => {
+    setHiddenRooms(prev => {
       const next = new Set(prev);
       if (next.has(roomId)) {
         next.delete(roomId);
@@ -1698,6 +1735,7 @@ export function ReservationProvider({ children }) {
     filteredRooms,
     allRooms,
     favoriteRooms,
+    hiddenRooms,
     timeSlots,
     displayTimeSlots,
     timeSlotInterval,
@@ -1763,6 +1801,7 @@ export function ReservationProvider({ children }) {
     setSelectedTeamFilter,
     setRoomFilters,
     toggleFavoriteRoom,
+    toggleHiddenRoom,
     createReservation,
     deleteReservation,
     updateReservation,
