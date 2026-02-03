@@ -1524,6 +1524,56 @@ export function ReservationProvider({ children }) {
     }));
   }, [selectedDate, rooms, allRooms, reservations]);
 
+  // 최적 회의실 자동 선택 (AI 예약용)
+  // 우선순위: 1. 같은 층 2. 즐겨찾기 3. 인원 수에 맞는 회의실 (정원-참여인원 최소)
+  const findBestRoom = useCallback((participantCount, startTime, endTime, date = selectedDate) => {
+    const availableRooms = getAvailableRooms(startTime, endTime, date);
+    if (availableRooms.length === 0) return null;
+
+    // 현재 선택된 층 목록
+    const currentFloors = selectedFloors;
+
+    // 점수 계산 함수
+    const calculateScore = (room) => {
+      let score = 0;
+
+      // 1. 같은 층 우선 (+1000점)
+      if (currentFloors.size > 0 && currentFloors.has(room.floor)) {
+        score += 1000;
+      }
+
+      // 2. 즐겨찾기 우선 (+500점)
+      if (favoriteRooms.has(room.id)) {
+        score += 500;
+      }
+
+      // 3. 정원 적합도 (정원 - 참여인원)
+      // 참여인원보다 정원이 크거나 같으면 +100 ~ +200점 (딱 맞을수록 높은 점수)
+      // 참여인원보다 정원이 작으면 -100점부터 (초과 인원만큼 감점)
+      const capacityDiff = room.capacity - participantCount;
+      if (capacityDiff >= 0) {
+        // 맞는 회의실: 0명 여유 = +200, 1명 여유 = +190, ...
+        score += Math.max(0, 200 - capacityDiff * 10);
+      } else {
+        // 작은 회의실: 1명 초과 = -10, 2명 초과 = -20, ...
+        score += capacityDiff * 10; // 음수
+      }
+
+      return score;
+    };
+
+    // 점수순 정렬 (높은 점수가 먼저)
+    const sortedRooms = [...availableRooms].sort((a, b) => {
+      const scoreA = calculateScore(a);
+      const scoreB = calculateScore(b);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      // 점수 같으면 정원이 작은 것 (낭비 최소화)
+      return a.capacity - b.capacity;
+    });
+
+    return sortedRooms[0] || null;
+  }, [getAvailableRooms, selectedFloors, favoriteRooms, selectedDate]);
+
   // 임직원 검색
   const searchEmployees = useCallback((query) => {
     if (!query || query.length < 1) return [];
@@ -1573,11 +1623,22 @@ export function ReservationProvider({ children }) {
       setParticipantsByNames(optionalNames, ATTENDEE_TYPES.OPTIONAL);
     }
 
-    // 3. 회의실 설정
+    // 3. 회의실 설정 (없으면 자동 선택)
     let targetRoom = null;
     if (roomName) {
       targetRoom = setRoomByName(roomName);
       if (!targetRoom) return { success: false, error: `회의실 "${roomName}" 찾을 수 없음` };
+    } else if (startTime && endTime) {
+      // 회의실 미지정 시 자동 선택
+      // 참여 인원 계산 (주관자 + 필수 참석자 + 선택 참석자)
+      const participantCount = 1 + requiredNames.length + optionalNames.length;
+      const bestRoom = findBestRoom(participantCount, startTime, endTime);
+      if (bestRoom) {
+        targetRoom = setRoomByName(bestRoom.name);
+      }
+      if (!targetRoom) {
+        return { success: false, error: '해당 시간에 예약 가능한 회의실이 없습니다' };
+      }
     }
 
     // 4. 시간 설정 및 슬롯 가져오기
@@ -1606,8 +1667,14 @@ export function ReservationProvider({ children }) {
       roomId: targetRoom?.id,
       slots: timeSlots,
     });
-    return result;
-  }, [setDateByString, setOrganizerByName, setParticipantsByNames, setRoomByName, setTimeByRange, setRecurrence, setRecurrenceEndDate, setMeetingTitle, createReservation]);
+    // 자동 선택된 회의실 정보 포함
+    return {
+      ...result,
+      roomName: targetRoom?.name,
+      roomCapacity: targetRoom?.capacity,
+      autoSelected: !roomName, // 회의실이 자동 선택되었는지 여부
+    };
+  }, [setDateByString, setOrganizerByName, setParticipantsByNames, setRoomByName, setTimeByRange, setRecurrence, setRecurrenceEndDate, setMeetingTitle, createReservation, findBestRoom]);
 
   // 내 예약 조회
   const getMyReservationList = useCallback((date = null) => {

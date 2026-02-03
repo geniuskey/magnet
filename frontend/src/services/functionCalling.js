@@ -132,7 +132,7 @@ export const FUNCTION_DEFINITIONS = [
   },
   {
     name: 'createQuickReservation',
-    description: '한 번의 호출로 회의실을 예약합니다',
+    description: '한 번의 호출로 회의실을 예약합니다. 회의실을 지정하지 않으면 참여 인원에 맞는 최적 회의실을 자동 선택합니다.',
     parameters: {
       type: 'object',
       properties: {
@@ -140,12 +140,12 @@ export const FUNCTION_DEFINITIONS = [
         organizerName: { type: 'string', description: '주관자 이름' },
         requiredNames: { type: 'array', items: { type: 'string' }, description: '필수 참석자 이름 목록' },
         optionalNames: { type: 'array', items: { type: 'string' }, description: '선택 참석자 이름 목록' },
-        roomName: { type: 'string', description: '회의실 이름' },
+        roomName: { type: 'string', description: '회의실 이름 (미지정시 자동 선택)' },
         date: { type: 'string', description: '날짜' },
         startTime: { type: 'string', description: '시작 시간' },
         endTime: { type: 'string', description: '종료 시간' },
       },
-      required: ['title', 'roomName', 'date', 'startTime', 'endTime'],
+      required: ['title', 'date', 'startTime', 'endTime'],
     },
   },
   {
@@ -207,7 +207,7 @@ export function parseUserIntent(message, context = {}) {
   const reservationPattern = /(.+?)[과와,]\s*(.+?)[과와]?\s*(내일|오늘|모레|\d{4}-\d{2}-\d{2}|다음\s*주)?\s*(오전|오후)?\s*(\d{1,2})시?\s*[~\-부터에]?\s*(오전|오후)?\s*(\d{1,2})시?.*?(회의실|대회의실|소회의실|세미나실|룸)/;
   const quickReservationMatch = message.match(reservationPattern);
 
-  // "예약" 키워드가 있거나, 회의실+시간 조합이면 예약 시도
+  // "예약" 키워드가 있거나, 시간이 있으면 예약 시도 (회의실 미지정 시 자동 선택)
   const hasReservationIntent = lowerMsg.includes('예약') || (
     (room || context.selectedRoom) && times
   );
@@ -219,18 +219,18 @@ export function parseUserIntent(message, context = {}) {
     // 날짜 추출 (없으면 오늘)
     const date = extractDate(message) || '오늘';
 
-    // 회의실: 메시지에서 추출 또는 현재 선택된 회의실 사용
+    // 회의실: 메시지에서 추출 또는 현재 선택된 회의실 사용 (없으면 자동 선택됨)
     const roomName = room || (context.selectedRoom ?
       (context.allRooms || []).find(r => r.id === context.selectedRoom)?.name : null);
 
-    if (times && roomName) {
+    if (times) {
       functionCalls.push({
         name: 'createQuickReservation',
         arguments: {
           title: '회의',
           organizerName: names[0] || null,
           requiredNames: names.slice(1),
-          roomName: roomName,
+          ...(roomName && { roomName }), // 회의실이 있으면 포함, 없으면 자동 선택
           date: date,
           startTime: times.startTime,
           endTime: times.endTime,
@@ -539,7 +539,7 @@ export async function executeFunctions(functionCalls, reservation) {
             function: call.name,
             success: result.success,
             data: result.success
-              ? `예약이 완료되었습니다! (${args.roomName}, ${args.date} ${args.startTime}~${args.endTime})`
+              ? `예약이 완료되었습니다! (${result.roomName}${result.autoSelected ? ' - 자동 선택' : ''}, ${args.date} ${args.startTime}~${args.endTime})`
               : `예약 실패: ${result.error}`,
           });
           break;
