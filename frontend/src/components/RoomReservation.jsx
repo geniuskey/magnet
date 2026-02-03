@@ -14,6 +14,8 @@ export default function RoomReservation() {
     filteredRooms,
     amenities,
     timeSlots,
+    displayTimeSlots,
+    timeSlotInterval,
     reservations,
     myReservations,
     selectedBuilding,
@@ -27,6 +29,7 @@ export default function RoomReservation() {
     setShowAvailability,
     meetingDuration,
     setMeetingDuration,
+    setTimeSlotInterval,
     roomFilters,
     selectBuilding,
     toggleFloor,
@@ -113,20 +116,42 @@ export default function RoomReservation() {
     return h * 60 + m;
   }
 
-  const getSlotStatus = (roomId, timeSlot) => {
-    if (reservations[roomId]?.[timeSlot]) {
+  // displaySlot에 해당하는 내부 슬롯들 가져오기
+  const getInternalSlotsForDisplay = useCallback((displaySlot) => {
+    const displayIdx = displayTimeSlots.indexOf(displaySlot);
+    if (displayIdx < 0) return [displaySlot];
+
+    // 다음 displaySlot의 시작 시간 계산
+    const nextDisplaySlot = displayTimeSlots[displayIdx + 1];
+    const startMin = timeToMinutes(displaySlot);
+    const endMin = nextDisplaySlot ? timeToMinutes(nextDisplaySlot) : startMin + timeSlotInterval;
+
+    // 해당 범위의 내부 슬롯들 반환
+    return timeSlots.filter(slot => {
+      const slotMin = timeToMinutes(slot);
+      return slotMin >= startMin && slotMin < endMin;
+    });
+  }, [displayTimeSlots, timeSlots, timeSlotInterval]);
+
+  const getSlotStatus = useCallback((roomId, displaySlot) => {
+    const internalSlots = getInternalSlotsForDisplay(displaySlot);
+
+    // 범위 내 어떤 슬롯이라도 예약되어 있으면 'reserved'
+    if (internalSlots.some(slot => reservations[roomId]?.[slot])) {
       return 'reserved';
     }
-    if (selectedTimeSlots.find(s => s.roomId === roomId && s.timeSlot === timeSlot)) {
+    // 범위 내 어떤 슬롯이라도 선택되어 있으면 'selected'
+    if (internalSlots.some(slot => selectedTimeSlots.find(s => s.roomId === roomId && s.timeSlot === slot))) {
       return 'selected';
     }
     return 'available';
-  };
+  }, [getInternalSlotsForDisplay, reservations, selectedTimeSlots]);
 
   // 참석자 바쁜 시간대 여부 확인
-  const isParticipantBusy = (timeSlot) => {
-    return participantBusySlots.has(timeSlot);
-  };
+  const isParticipantBusy = useCallback((displaySlot) => {
+    const internalSlots = getInternalSlotsForDisplay(displaySlot);
+    return internalSlots.some(slot => participantBusySlots.has(slot));
+  }, [getInternalSlotsForDisplay, participantBusySlots]);
 
   // 추천 시간 적용
   const applyOptimalTime = (startTime, endTime, roomId) => {
@@ -143,8 +168,7 @@ export default function RoomReservation() {
       requestAnimationFrame(() => {
         const container = scrollContainerRef.current;
         if (container) {
-          const startIdx = timeSlots.indexOf(startTime);
-          const slotWidth = 20; // w-5 = 20px
+          const startIdx = displayTimeSlots.indexOf(startTime);
           const roomNameWidth = 128; // w-32 = 128px
           const containerWidth = container.clientWidth;
 
@@ -162,18 +186,19 @@ export default function RoomReservation() {
     }
   };
 
-  // 컨텍스트 메뉴 열기
-  const handleContextMenu = (e, roomId, slotIndex, room) => {
+  // 컨텍스트 메뉴 열기 (displaySlotIndex 사용)
+  const handleContextMenu = (e, roomId, displaySlotIndex, room) => {
     e.preventDefault();
-    const slot = timeSlots[slotIndex];
+    const slot = displayTimeSlots[displaySlotIndex];
     const status = getSlotStatus(roomId, slot);
-    const reservation = reservations[roomId]?.[slot];
+    const internalSlots = getInternalSlotsForDisplay(slot);
+    const reservation = internalSlots.map(s => reservations[roomId]?.[s]).find(r => r);
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       roomId,
-      slotIndex,
+      slotIndex: displaySlotIndex,
       slot,
       status,
       room,
@@ -187,21 +212,25 @@ export default function RoomReservation() {
   // 컨텍스트 메뉴 - 시간 선택 (duration: 분)
   const handleSelectDuration = (duration) => {
     if (!contextMenu) return;
-    const { roomId, slotIndex } = contextMenu;
+    const { roomId, slot } = contextMenu;
+    // 시작 슬롯 (내부 슬롯 기준)
+    const startSlot = slot;
+    const startIdx = timeSlots.indexOf(startSlot);
     const slotsNeeded = Math.ceil(duration / 10);
-    const endIdx = Math.min(slotIndex + slotsNeeded - 1, timeSlots.length - 1);
-    selectTimeRange(roomId, timeSlots[slotIndex], timeSlots[endIdx]);
+    const endIdx = Math.min(startIdx + slotsNeeded - 1, timeSlots.length - 1);
+    selectTimeRange(roomId, timeSlots[startIdx], timeSlots[endIdx]);
     closeContextMenu();
   };
 
   // 컨텍스트 메뉴 - 정시까지 선택
   const handleSelectToNextHour = () => {
     if (!contextMenu) return;
-    const { roomId, slotIndex, slot } = contextMenu;
+    const { roomId, slot } = contextMenu;
+    const startIdx = timeSlots.indexOf(slot);
     const currentMin = parseInt(slot.split(':')[1]);
     const slotsToHour = currentMin === 0 ? 6 : Math.ceil((60 - currentMin) / 10);
-    const endIdx = Math.min(slotIndex + slotsToHour - 1, timeSlots.length - 1);
-    selectTimeRange(roomId, timeSlots[slotIndex], timeSlots[endIdx]);
+    const endIdx = Math.min(startIdx + slotsToHour - 1, timeSlots.length - 1);
+    selectTimeRange(roomId, timeSlots[startIdx], timeSlots[endIdx]);
     closeContextMenu();
   };
 
@@ -328,23 +357,24 @@ export default function RoomReservation() {
     setSelectedDate,
   ]);
 
-  // 드래그 범위 내 슬롯인지 확인
-  const isInDragRange = (roomId, slotIndex) => {
+  // 드래그 범위 내 슬롯인지 확인 (displaySlotIndex 사용)
+  const isInDragRange = (roomId, displaySlotIndex) => {
     if (!isDragging || !dragStart || dragStart.roomId !== roomId) return false;
     const endIndex = dragEnd?.slotIndex ?? dragStart.slotIndex;
     const minIdx = Math.min(dragStart.slotIndex, endIndex);
     const maxIdx = Math.max(dragStart.slotIndex, endIndex);
-    return slotIndex >= minIdx && slotIndex <= maxIdx;
+    return displaySlotIndex >= minIdx && displaySlotIndex <= maxIdx;
   };
 
-  // 마우스 다운 - 드래그 시작
-  const handleMouseDown = (roomId, slotIndex, room) => {
-    const slot = timeSlots[slotIndex];
+  // 마우스 다운 - 드래그 시작 (displaySlotIndex 사용)
+  const handleMouseDown = (roomId, displaySlotIndex, room) => {
+    const slot = displayTimeSlots[displaySlotIndex];
     const status = getSlotStatus(roomId, slot);
 
     // 예약된 슬롯 클릭 시 상세 모달 표시
     if (status === 'reserved') {
-      const reservation = reservations[roomId][slot];
+      const internalSlots = getInternalSlotsForDisplay(slot);
+      const reservation = internalSlots.map(s => reservations[roomId]?.[s]).find(r => r);
       setViewingReservation(reservation);
       setViewingRoom(room);
       return;
@@ -354,18 +384,18 @@ export default function RoomReservation() {
     clearSelection();
 
     setIsDragging(true);
-    setDragStart({ roomId, slotIndex });
-    setDragEnd({ roomId, slotIndex });
+    setDragStart({ roomId, slotIndex: displaySlotIndex });
+    setDragEnd({ roomId, slotIndex: displaySlotIndex });
   };
 
-  // 마우스 이동 - 드래그 중
-  const handleMouseEnter = (roomId, slotIndex) => {
+  // 마우스 이동 - 드래그 중 (displaySlotIndex 사용)
+  const handleMouseEnter = (roomId, displaySlotIndex) => {
     if (!isDragging || !dragStart) return;
 
     // 같은 방에서만 드래그 가능
     if (dragStart.roomId !== roomId) return;
 
-    setDragEnd({ roomId, slotIndex });
+    setDragEnd({ roomId, slotIndex: displaySlotIndex });
   };
 
   // 마우스 업 - 드래그 종료
@@ -376,8 +406,18 @@ export default function RoomReservation() {
     }
 
     const endIndex = dragEnd?.slotIndex ?? dragStart.slotIndex;
-    const startSlot = timeSlots[dragStart.slotIndex];
-    const endSlot = timeSlots[endIndex];
+
+    // displaySlots에서 범위 찾기
+    const startDisplaySlot = displayTimeSlots[dragStart.slotIndex];
+    const endDisplaySlot = displayTimeSlots[endIndex];
+
+    // 각 displaySlot의 내부 슬롯 가져오기
+    const startInternalSlots = getInternalSlotsForDisplay(startDisplaySlot);
+    const endInternalSlots = getInternalSlotsForDisplay(endDisplaySlot);
+
+    // 첫 내부슬롯부터 마지막 내부슬롯까지 선택
+    const startSlot = startInternalSlots[0];
+    const endSlot = endInternalSlots[endInternalSlots.length - 1];
 
     // 범위 선택
     selectTimeRange(dragStart.roomId, startSlot, endSlot);
@@ -385,7 +425,7 @@ export default function RoomReservation() {
     setIsDragging(false);
     setDragStart(null);
     setDragEnd(null);
-  }, [isDragging, dragStart, dragEnd, timeSlots, selectTimeRange]);
+  }, [isDragging, dragStart, dragEnd, displayTimeSlots, getInternalSlotsForDisplay, selectTimeRange]);
 
   // 전역 마우스 업 이벤트
   useEffect(() => {
@@ -495,19 +535,43 @@ export default function RoomReservation() {
     }
   }, [isMinimapDragging, handleMinimapDragMove, handleMinimapDragEnd]);
 
-  // 선택 영역의 시작/끝 슬롯 인덱스
+  // 선택 영역의 시작/끝 슬롯 인덱스 (displayTimeSlots 기준)
   const selectedSlotRange = useMemo(() => {
     if (selectedTimeSlots.length === 0 || !selectedRoom) return null;
 
-    const indices = selectedTimeSlots
+    // 내부 슬롯 인덱스 가져오기
+    const internalIndices = selectedTimeSlots
       .filter(s => s.roomId === selectedRoom)
       .map(s => timeSlots.indexOf(s.timeSlot))
       .filter(i => i >= 0)
       .sort((a, b) => a - b);
 
-    if (indices.length === 0) return null;
-    return { start: indices[0], end: indices[indices.length - 1] };
-  }, [selectedTimeSlots, selectedRoom, timeSlots]);
+    if (internalIndices.length === 0) return null;
+
+    // 내부 인덱스를 displayTimeSlots 인덱스로 변환
+    const startSlot = timeSlots[internalIndices[0]];
+    const endSlot = timeSlots[internalIndices[internalIndices.length - 1]];
+
+    // displayTimeSlots에서 해당 슬롯을 포함하는 인덱스 찾기
+    const startDisplayIdx = displayTimeSlots.findIndex((s, i) => {
+      const nextSlot = displayTimeSlots[i + 1];
+      const startMin = timeToMinutes(s);
+      const endMin = nextSlot ? timeToMinutes(nextSlot) : startMin + timeSlotInterval;
+      const slotMin = timeToMinutes(startSlot);
+      return slotMin >= startMin && slotMin < endMin;
+    });
+
+    const endDisplayIdx = displayTimeSlots.findIndex((s, i) => {
+      const nextSlot = displayTimeSlots[i + 1];
+      const startMin = timeToMinutes(s);
+      const endMin = nextSlot ? timeToMinutes(nextSlot) : startMin + timeSlotInterval;
+      const slotMin = timeToMinutes(endSlot);
+      return slotMin >= startMin && slotMin < endMin;
+    });
+
+    if (startDisplayIdx < 0 || endDisplayIdx < 0) return null;
+    return { start: startDisplayIdx, end: endDisplayIdx };
+  }, [selectedTimeSlots, selectedRoom, timeSlots, displayTimeSlots, timeSlotInterval]);
 
   // 리사이즈 시작
   const handleResizeStart = (edge, e) => {
@@ -516,8 +580,8 @@ export default function RoomReservation() {
     setResizeEdge(edge);
   };
 
-  // 리사이즈 중 마우스 이동
-  const handleResizeMove = useCallback((roomId, slotIndex) => {
+  // 리사이즈 중 마우스 이동 (displaySlotIndex 사용)
+  const handleResizeMove = useCallback((roomId, displaySlotIndex) => {
     if (!isResizing || !selectedSlotRange || roomId !== selectedRoom) return;
 
     const { start, end } = selectedSlotRange;
@@ -525,15 +589,20 @@ export default function RoomReservation() {
     let newEnd = end;
 
     if (resizeEdge === 'start') {
-      newStart = Math.min(slotIndex, end);
+      newStart = Math.min(displaySlotIndex, end);
     } else if (resizeEdge === 'end') {
-      newEnd = Math.max(slotIndex, start);
+      newEnd = Math.max(displaySlotIndex, start);
     }
 
     if (newStart !== start || newEnd !== end) {
-      selectTimeRange(roomId, timeSlots[newStart], timeSlots[newEnd]);
+      // displayTimeSlots 인덱스를 내부 슬롯으로 변환
+      const startDisplaySlot = displayTimeSlots[newStart];
+      const endDisplaySlot = displayTimeSlots[newEnd];
+      const startInternalSlots = getInternalSlotsForDisplay(startDisplaySlot);
+      const endInternalSlots = getInternalSlotsForDisplay(endDisplaySlot);
+      selectTimeRange(roomId, startInternalSlots[0], endInternalSlots[endInternalSlots.length - 1]);
     }
-  }, [isResizing, selectedSlotRange, selectedRoom, resizeEdge, timeSlots, selectTimeRange]);
+  }, [isResizing, selectedSlotRange, selectedRoom, resizeEdge, displayTimeSlots, getInternalSlotsForDisplay, selectTimeRange]);
 
   // 리사이즈 종료
   const handleResizeEnd = useCallback(() => {
@@ -549,11 +618,11 @@ export default function RoomReservation() {
     }
   }, [isResizing, handleResizeEnd]);
 
-  // 슬롯이 선택 영역의 가장자리인지 확인
-  const getSlotEdge = (roomId, slotIndex) => {
+  // 슬롯이 선택 영역의 가장자리인지 확인 (displaySlotIndex 사용)
+  const getSlotEdge = (roomId, displaySlotIndex) => {
     if (!selectedSlotRange || roomId !== selectedRoom) return null;
-    if (slotIndex === selectedSlotRange.start) return 'start';
-    if (slotIndex === selectedSlotRange.end) return 'end';
+    if (displaySlotIndex === selectedSlotRange.start) return 'start';
+    if (displaySlotIndex === selectedSlotRange.end) return 'end';
     return null;
   };
 
@@ -763,11 +832,10 @@ export default function RoomReservation() {
   useEffect(() => {
     if (scrollTargetTime && scrollContainerRef.current) {
       const { startTime, endTime } = scrollTargetTime;
-      const startIdx = timeSlots.indexOf(startTime);
-      const endIdx = timeSlots.findIndex(s => s >= endTime);
+      const startIdx = displayTimeSlots.indexOf(startTime);
+      const endIdx = displayTimeSlots.findIndex(s => s >= endTime);
 
       if (startIdx >= 0) {
-        const slotWidth = 20; // w-5 = 20px
         const roomNameWidth = 128; // w-32 = 128px
         const container = scrollContainerRef.current;
         const containerWidth = container.clientWidth;
@@ -786,7 +854,7 @@ export default function RoomReservation() {
       // 스크롤 후 초기화
       clearScrollTarget();
     }
-  }, [scrollTargetTime, timeSlots, clearScrollTarget]);
+  }, [scrollTargetTime, displayTimeSlots, slotWidth, clearScrollTarget]);
 
   // 예약 리사이즈 미리보기 범위 계산
   const getReservationResizePreview = (roomId) => {
@@ -838,10 +906,17 @@ export default function RoomReservation() {
   };
 
   // 시간 헤더용 - 정각만 표시
-  const hourSlots = timeSlots.filter(slot => slot.endsWith(':00'));
+  const hourSlots = displayTimeSlots.filter(slot => slot.endsWith(':00'));
 
-  // 10분 단위로 시간 파싱
+  // 슬롯이 시간의 시작인지 확인 (간격에 따라)
   const isHourStart = (slot) => slot.endsWith(':00');
+
+  // 슬롯 너비 계산 (간격에 따라)
+  const slotWidth = useMemo(() => {
+    // 1시간 = 120px 기준
+    // 10분: 20px, 30분: 60px, 60분: 120px
+    return (timeSlotInterval / 10) * 20;
+  }, [timeSlotInterval]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -894,6 +969,19 @@ export default function RoomReservation() {
               onChange={(e) => setSelectedDate(e.target.value)}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">간격:</label>
+            <select
+              value={timeSlotInterval}
+              onChange={(e) => setTimeSlotInterval(Number(e.target.value))}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value={10}>10분</option>
+              <option value={30}>30분</option>
+              <option value={60}>1시간</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1146,7 +1234,7 @@ export default function RoomReservation() {
                       <div
                         key={hour}
                         className="flex-shrink-0 flex items-center justify-center border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
-                        style={{ width: '120px' }}
+                        style={{ width: `${slotWidth * (60 / timeSlotInterval)}px` }}
                       >
                         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{hour}</span>
                       </div>
@@ -1192,13 +1280,17 @@ export default function RoomReservation() {
                               <div className="text-xs text-gray-500 dark:text-gray-400">{room.capacity}인</div>
                             </div>
                     <div className="flex">
-                      {timeSlots.map((slot, slotIndex) => {
+                      {displayTimeSlots.map((slot, displaySlotIndex) => {
+                        // displaySlot에 해당하는 원본 timeSlots 인덱스 찾기
+                        const slotIndex = timeSlots.indexOf(slot);
                         const status = getSlotStatus(room.id, slot);
-                        const reservation = reservations[room.id]?.[slot];
+                        // 예약 정보는 해당 범위 내 첫 예약을 가져옴
+                        const internalSlots = getInternalSlotsForDisplay(slot);
+                        const reservation = internalSlots.map(s => reservations[room.id]?.[s]).find(r => r);
                         const isHour = isHourStart(slot);
-                        const inDragRange = isInDragRange(room.id, slotIndex);
+                        const inDragRange = isInDragRange(room.id, displaySlotIndex);
                         const isBusy = showAvailability && isParticipantBusy(slot);
-                        const edge = getSlotEdge(room.id, slotIndex);
+                        const edge = getSlotEdge(room.id, displaySlotIndex);
                         const reservationEdge = getReservationEdge(room.id, slotIndex, reservation);
                         const resizePreview = getReservationResizePreview(room.id);
                         const inResizePreview = resizePreview && slotIndex >= resizePreview.start && slotIndex <= resizePreview.end;
@@ -1213,13 +1305,13 @@ export default function RoomReservation() {
                             onMouseDown={(e) => {
                               // 리사이즈 핸들 클릭이 아닌 경우에만 일반 드래그 시작
                               if (!e.target.classList.contains('resize-handle')) {
-                                handleMouseDown(room.id, slotIndex, room);
+                                handleMouseDown(room.id, displaySlotIndex, room);
                               }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                handleMouseDown(room.id, slotIndex, room);
+                                handleMouseDown(room.id, displaySlotIndex, room);
                               }
                             }}
                             onMouseEnter={() => {
@@ -1228,13 +1320,14 @@ export default function RoomReservation() {
                               } else if (movingReservation) {
                                 handleReservationDragMove(room.id, slotIndex);
                               } else if (isResizing) {
-                                handleResizeMove(room.id, slotIndex);
+                                handleResizeMove(room.id, displaySlotIndex);
                               } else {
-                                handleMouseEnter(room.id, slotIndex);
+                                handleMouseEnter(room.id, displaySlotIndex);
                               }
                             }}
-                            onContextMenu={(e) => handleContextMenu(e, room.id, slotIndex, room)}
-                            className={`flex-shrink-0 w-5 h-10 cursor-pointer transition-colors relative focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
+                            onContextMenu={(e) => handleContextMenu(e, room.id, displaySlotIndex, room)}
+                            style={{ width: `${slotWidth}px` }}
+                            className={`flex-shrink-0 h-10 cursor-pointer transition-colors relative focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
                               isHour ? 'border-l border-gray-200 dark:border-gray-600' : 'border-l border-gray-100 dark:border-gray-700'
                             } ${
                               // 리사이즈 미리보기
@@ -1351,19 +1444,19 @@ export default function RoomReservation() {
                   {filteredRooms.map((room, roomIdx) => (
                     <div key={room.id} className="absolute inset-0">
                       {Object.entries(reservations[room.id] || {}).map(([slot, res]) => {
-                        const slotIdx = timeSlots.indexOf(slot);
+                        const slotIdx = displayTimeSlots.indexOf(slot);
                         if (slotIdx < 0) return null;
                         // 예약의 첫 슬롯만 표시
-                        const prevSlot = timeSlots[slotIdx - 1];
+                        const prevSlot = displayTimeSlots[slotIdx - 1];
                         if (prevSlot && reservations[room.id]?.[prevSlot]?.id === res.id) return null;
 
                         // 예약 길이 계산
                         let endIdx = slotIdx;
-                        while (endIdx < timeSlots.length - 1 && reservations[room.id]?.[timeSlots[endIdx + 1]]?.id === res.id) {
+                        while (endIdx < displayTimeSlots.length - 1 && reservations[room.id]?.[displayTimeSlots[endIdx + 1]]?.id === res.id) {
                           endIdx++;
                         }
-                        const startPercent = (slotIdx / timeSlots.length) * 100;
-                        const widthPercent = ((endIdx - slotIdx + 1) / timeSlots.length) * 100;
+                        const startPercent = (slotIdx / displayTimeSlots.length) * 100;
+                        const widthPercent = ((endIdx - slotIdx + 1) / displayTimeSlots.length) * 100;
                         const topPercent = (roomIdx / filteredRooms.length) * 100;
                         const heightPercent = 100 / filteredRooms.length;
 
@@ -1388,8 +1481,8 @@ export default function RoomReservation() {
                     <div
                       className="absolute bg-blue-500 opacity-80"
                       style={{
-                        left: `${(selectedSlotRange.start / timeSlots.length) * 100}%`,
-                        width: `${((selectedSlotRange.end - selectedSlotRange.start + 1) / timeSlots.length) * 100}%`,
+                        left: `${(selectedSlotRange.start / displayTimeSlots.length) * 100}%`,
+                        width: `${((selectedSlotRange.end - selectedSlotRange.start + 1) / displayTimeSlots.length) * 100}%`,
                         top: `${(filteredRooms.findIndex(r => r.id === selectedRoom) / filteredRooms.length) * 100}%`,
                         height: `${100 / filteredRooms.length}%`,
                       }}

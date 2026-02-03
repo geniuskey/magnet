@@ -228,18 +228,21 @@ const MOCK_ROOMS = generateRooms();
 
 const ALL_ROOMS = Object.values(MOCK_ROOMS).flat();
 
-// 시간 슬롯 생성 (06:00 ~ 24:00, 10분 단위)
-const generateTimeSlots = () => {
+// 시간 슬롯 생성 (06:00 ~ 24:00)
+const generateTimeSlots = (intervalMinutes = 10) => {
   const slots = [];
   for (let hour = 6; hour < 24; hour++) {
-    for (let min = 0; min < 60; min += 10) {
+    for (let min = 0; min < 60; min += intervalMinutes) {
       slots.push(`${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`);
     }
   }
   return slots;
 };
 
-const TIME_SLOTS = generateTimeSlots();
+// 기본 10분 단위 슬롯 (내부 처리용)
+const TIME_SLOTS_10MIN = generateTimeSlots(10);
+// 하위 호환성을 위한 기본 슬롯
+const TIME_SLOTS = TIME_SLOTS_10MIN;
 
 // Mock 예약 데이터 생성
 const generateMockReservations = () => {
@@ -353,6 +356,7 @@ export function ReservationProvider({ children }) {
   const [showAvailability, setShowAvailability] = useState(true);
   const [meetingDuration, setMeetingDuration] = useState(60);
   const [scrollTargetTime, setScrollTargetTime] = useState(null); // { startTime, endTime } - 스크롤 대상 시간
+  const [timeSlotInterval, setTimeSlotInterval] = useState(60); // 10, 30, 60분 (default: 1시간)
 
   // 검색/필터 상태
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
@@ -394,7 +398,13 @@ export function ReservationProvider({ children }) {
   }, [rooms, roomFilters]);
 
   const allRooms = ALL_ROOMS;
-  const timeSlots = TIME_SLOTS;
+  const timeSlots = TIME_SLOTS; // 10분 단위 (내부 처리용)
+
+  // 화면 표시용 시간 슬롯 (선택한 간격에 따라)
+  const displayTimeSlots = useMemo(() => {
+    return generateTimeSlots(timeSlotInterval);
+  }, [timeSlotInterval]);
+
   const recurrenceTypes = RECURRENCE_TYPES;
   const attendeeTypes = ATTENDEE_TYPES;
   const selectionTypes = SELECTION_TYPES;
@@ -1645,6 +1655,8 @@ export function ReservationProvider({ children }) {
     filteredRooms,
     allRooms,
     timeSlots,
+    displayTimeSlots,
+    timeSlotInterval,
     reservations,
     myReservations,
     recurrenceTypes,
@@ -1702,6 +1714,7 @@ export function ReservationProvider({ children }) {
     setShowMyReservations,
     setShowAvailability,
     setMeetingDuration,
+    setTimeSlotInterval,
     setEmployeeSearchQuery,
     setSelectedTeamFilter,
     setRoomFilters,
