@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """애플리케이션 설정"""
 
     # LLM 설정
-    llm_provider: str = "gemini"  # anthropic, openai, gemini, custom
+    llm_provider: str = "gemini"  # anthropic, openai, gemini, litellm, custom
 
     # 각 provider별 API 키
     anthropic_api_key: str = ""
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     openai_api_url: str = ""  # 기본: https://api.openai.com/v1
     gemini_api_url: str = ""  # 기본: https://generativelanguage.googleapis.com
 
+    # LiteLLM 설정 (100+ LLM 통합)
+    litellm_model: str = ""  # 예: openai/gpt-4, anthropic/claude-3, ollama/llama3, vllm/model
+    litellm_api_key: str = ""  # 필요한 경우 (provider에 따라 다름)
+    litellm_api_base: str = ""  # LiteLLM Proxy 또는 커스텀 엔드포인트
+
     # Custom LLM 설정 (OpenAI 호환 API)
     custom_api_key: str = ""
     custom_api_url: str = ""  # 예: http://localhost:11434/v1, https://your-server.com/v1
@@ -39,6 +44,8 @@ class Settings(BaseSettings):
             return self.openai_api_key
         elif p == "gemini":
             return self.gemini_api_key
+        elif p == "litellm":
+            return self.litellm_api_key
         elif p == "custom":
             return self.custom_api_key
         return ""
@@ -52,6 +59,8 @@ class Settings(BaseSettings):
             return self.openai_model
         elif p == "gemini":
             return self.gemini_model
+        elif p == "litellm":
+            return self.litellm_model
         elif p == "custom":
             return self.custom_model
         return ""
@@ -65,6 +74,8 @@ class Settings(BaseSettings):
             return self.openai_api_url or "https://api.openai.com/v1"
         elif p == "gemini":
             return self.gemini_api_url or "https://generativelanguage.googleapis.com"
+        elif p == "litellm":
+            return self.litellm_api_base
         elif p == "custom":
             return self.custom_api_url
         return ""

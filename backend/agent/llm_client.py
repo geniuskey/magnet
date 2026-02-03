@@ -16,6 +16,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GEMINI = "gemini"
+    LITELLM = "litellm"
     CUSTOM = "custom"
 
 
@@ -33,6 +34,8 @@ class LLMClient:
             self._init_openai()
         elif self.provider == LLMProvider.GEMINI:
             self._init_gemini()
+        elif self.provider == LLMProvider.LITELLM:
+            self._init_litellm()
         elif self.provider == LLMProvider.CUSTOM:
             self._init_custom()
 
@@ -61,6 +64,20 @@ class LLMClient:
         from google import genai
         self.client = genai.Client(api_key=settings.get_api_key("gemini"))
         self.model = settings.get_model("gemini")
+
+    def _init_litellm(self):
+        """LiteLLM 클라이언트 초기화"""
+        import litellm
+        self.client = litellm
+        self.model = settings.litellm_model
+        self.api_key = settings.litellm_api_key
+        self.api_base = settings.litellm_api_base
+
+        # LiteLLM 설정
+        if self.api_key:
+            litellm.api_key = self.api_key
+        if self.api_base:
+            litellm.api_base = self.api_base
 
     def _init_custom(self):
         """Custom LLM 클라이언트 초기화 (OpenAI 호환 API, httpx 사용)"""
@@ -104,6 +121,8 @@ class LLMClient:
             return await self._chat_openai(messages, tools, tool_choice, system_prompt, max_tokens)
         elif self.provider == LLMProvider.GEMINI:
             return await self._chat_gemini(messages, tools, tool_choice, system_prompt, max_tokens)
+        elif self.provider == LLMProvider.LITELLM:
+            return await self._chat_litellm(messages, tools, tool_choice, system_prompt, max_tokens)
         elif self.provider == LLMProvider.CUSTOM:
             return await self._chat_custom(messages, tools, tool_choice, system_prompt, max_tokens)
 
@@ -129,6 +148,9 @@ class LLMClient:
                 yield chunk
         elif self.provider == LLMProvider.GEMINI:
             async for chunk in self._chat_stream_gemini(messages, tools, tool_choice, system_prompt, max_tokens):
+                yield chunk
+        elif self.provider == LLMProvider.LITELLM:
+            async for chunk in self._chat_stream_litellm(messages, tools, tool_choice, system_prompt, max_tokens):
                 yield chunk
         elif self.provider == LLMProvider.CUSTOM:
             async for chunk in self._chat_stream_custom(messages, tools, tool_choice, system_prompt, max_tokens):
@@ -537,6 +559,110 @@ class LLMClient:
             logger.error(f"Error parsing Gemini response: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return result
+
+    # LiteLLM 메서드
+    async def _chat_litellm(
+        self,
+        messages: list[dict],
+        tools: Optional[list[dict]],
+        tool_choice: Optional[dict],
+        system_prompt: Optional[str],
+        max_tokens: int,
+    ) -> dict:
+        """LiteLLM API 호출"""
+        for attempt in range(self.max_retries):
+            try:
+                # OpenAI 형식으로 메시지 변환
+                litellm_messages = self._convert_messages_openai(messages, system_prompt)
+
+                kwargs = {
+                    "model": self.model,
+                    "messages": litellm_messages,
+                    "max_tokens": max_tokens,
+                }
+
+                if self.api_key:
+                    kwargs["api_key"] = self.api_key
+                if self.api_base:
+                    kwargs["api_base"] = self.api_base
+
+                if tools:
+                    kwargs["tools"] = self._convert_tools_openai(tools)
+
+                if tool_choice:
+                    kwargs["tool_choice"] = "auto"
+
+                # LiteLLM async completion
+                response = await self.client.acompletion(**kwargs)
+                return self._parse_response_litellm(response)
+
+            except Exception as e:
+                logger.error(f"LiteLLM API error, attempt {attempt + 1}/{self.max_retries}: {type(e).__name__}: {e}")
+                if attempt == self.max_retries - 1:
+                    raise
+                import asyncio
+                await asyncio.sleep(2 ** attempt)
+
+    async def _chat_stream_litellm(self, messages, tools, tool_choice, system_prompt, max_tokens):
+        """LiteLLM 스트리밍 API 호출"""
+        litellm_messages = self._convert_messages_openai(messages, system_prompt)
+
+        kwargs = {
+            "model": self.model,
+            "messages": litellm_messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        if self.api_base:
+            kwargs["api_base"] = self.api_base
+
+        if tools:
+            kwargs["tools"] = self._convert_tools_openai(tools)
+
+        response = await self.client.acompletion(**kwargs)
+        async for chunk in response:
+            if hasattr(chunk, "choices") and chunk.choices:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, "content") and delta.content:
+                    yield delta.content
+
+    def _parse_response_litellm(self, response) -> dict:
+        """LiteLLM 응답 파싱"""
+        result = {
+            "content": "",
+            "tool_calls": [],
+            "stop_reason": "end_turn",
+        }
+
+        if hasattr(response, "choices") and response.choices:
+            choice = response.choices[0]
+            message = choice.message
+
+            result["content"] = message.content or ""
+            result["stop_reason"] = choice.finish_reason or "end_turn"
+
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                for tc in message.tool_calls:
+                    args = tc.function.arguments
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except json.JSONDecodeError:
+                            args = {}
+
+                    result["tool_calls"].append({
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "arguments": args,
+                    })
+
+                if result["tool_calls"]:
+                    result["stop_reason"] = "tool_use"
 
         return result
 
