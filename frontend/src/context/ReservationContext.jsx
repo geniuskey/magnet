@@ -4,6 +4,7 @@ const ReservationContext = createContext(null);
 
 const STORAGE_KEY = 'meeting_scheduler_preferences';
 const MY_RESERVATIONS_KEY = 'my_reservations';
+const FAVORITE_ROOMS_KEY = 'favorite_rooms';
 
 // 한국 이름 생성용 데이터
 const LAST_NAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '류', '홍'];
@@ -315,6 +316,21 @@ const saveMyReservations = (reservations) => {
   } catch (e) {}
 };
 
+const loadFavoriteRooms = () => {
+  try {
+    const saved = localStorage.getItem(FAVORITE_ROOMS_KEY);
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch (e) {
+    return new Set();
+  }
+};
+
+const saveFavoriteRooms = (favoriteRooms) => {
+  try {
+    localStorage.setItem(FAVORITE_ROOMS_KEY, JSON.stringify([...favoriteRooms]));
+  } catch (e) {}
+};
+
 // 반복 패턴
 const RECURRENCE_TYPES = {
   NONE: 'none',
@@ -357,6 +373,7 @@ export function ReservationProvider({ children }) {
   const [meetingDuration, setMeetingDuration] = useState(60);
   const [scrollTargetTime, setScrollTargetTime] = useState(null); // { startTime, endTime } - 스크롤 대상 시간
   const [timeSlotInterval, setTimeSlotInterval] = useState(60); // 10, 30, 60분 (default: 1시간)
+  const [favoriteRooms, setFavoriteRooms] = useState(() => loadFavoriteRooms());
 
   // 검색/필터 상태
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
@@ -379,7 +396,7 @@ export function ReservationProvider({ children }) {
     return Array.from(selectedFloors).flatMap(floorId => MOCK_ROOMS[floorId] || []);
   }, [selectedFloors]);
 
-  // 필터링된 회의실 목록
+  // 필터링된 회의실 목록 (즐겨찾기 먼저)
   const filteredRooms = useMemo(() => {
     let result = rooms;
     // 이름 검색
@@ -394,8 +411,14 @@ export function ReservationProvider({ children }) {
     if (roomFilters.amenities.length > 0) {
       result = result.filter(r => roomFilters.amenities.every(a => r.amenities?.includes(a)));
     }
+    // 즐겨찾기 먼저 정렬
+    result = result.sort((a, b) => {
+      const aFav = favoriteRooms.has(a.id) ? 0 : 1;
+      const bFav = favoriteRooms.has(b.id) ? 0 : 1;
+      return aFav - bFav;
+    });
     return result;
-  }, [rooms, roomFilters]);
+  }, [rooms, roomFilters, favoriteRooms]);
 
   const allRooms = ALL_ROOMS;
   const timeSlots = TIME_SLOTS; // 10분 단위 (내부 처리용)
@@ -470,6 +493,26 @@ export function ReservationProvider({ children }) {
       saveMyReservations(myReservations);
     }
   }, [myReservations, isInitialized]);
+
+  // 즐겨찾기 저장
+  useEffect(() => {
+    if (isInitialized) {
+      saveFavoriteRooms(favoriteRooms);
+    }
+  }, [favoriteRooms, isInitialized]);
+
+  // 즐겨찾기 토글
+  const toggleFavoriteRoom = useCallback((roomId) => {
+    setFavoriteRooms(prev => {
+      const next = new Set(prev);
+      if (next.has(roomId)) {
+        next.delete(roomId);
+      } else {
+        next.add(roomId);
+      }
+      return next;
+    });
+  }, []);
 
   // 개인 추가 (entity로도 추적) - addAttendee 보다 먼저 정의되어야 함
   const addIndividualAttendee = useCallback((employee, type = ATTENDEE_TYPES.REQUIRED) => {
@@ -1654,6 +1697,7 @@ export function ReservationProvider({ children }) {
     rooms,
     filteredRooms,
     allRooms,
+    favoriteRooms,
     timeSlots,
     displayTimeSlots,
     timeSlotInterval,
@@ -1718,6 +1762,7 @@ export function ReservationProvider({ children }) {
     setEmployeeSearchQuery,
     setSelectedTeamFilter,
     setRoomFilters,
+    toggleFavoriteRoom,
     createReservation,
     deleteReservation,
     updateReservation,
