@@ -16,6 +16,7 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     GEMINI = "gemini"
+    CUSTOM = "custom"
 
 
 class LLMClient:
@@ -32,19 +33,26 @@ class LLMClient:
             self._init_openai()
         elif self.provider == LLMProvider.GEMINI:
             self._init_gemini()
+        elif self.provider == LLMProvider.CUSTOM:
+            self._init_custom()
 
     def _init_anthropic(self):
         """Anthropic 클라이언트 초기화"""
         from anthropic import Anthropic
-        self.client = Anthropic(api_key=settings.get_api_key("anthropic"))
+        base_url = settings.anthropic_api_url or None
+        self.client = Anthropic(
+            api_key=settings.get_api_key("anthropic"),
+            base_url=base_url,
+        )
         self.model = settings.get_model("anthropic")
 
     def _init_openai(self):
         """OpenAI 클라이언트 초기화"""
         from openai import OpenAI
+        base_url = settings.openai_api_url or None
         self.client = OpenAI(
             api_key=settings.get_api_key("openai"),
-            base_url=settings.openai_api_url if settings.openai_api_url else None,
+            base_url=base_url,
         )
         self.model = settings.get_model("openai")
 
@@ -53,6 +61,21 @@ class LLMClient:
         from google import genai
         self.client = genai.Client(api_key=settings.get_api_key("gemini"))
         self.model = settings.get_model("gemini")
+
+    def _init_custom(self):
+        """Custom LLM 클라이언트 초기화 (OpenAI 호환 API, httpx 사용)"""
+        import httpx
+        self.base_url = settings.custom_api_url.rstrip("/")
+        self.api_key = settings.custom_api_key
+        self.model = settings.custom_model
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=120.0,
+            headers={
+                "Content-Type": "application/json",
+                **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}),
+            },
+        )
 
     async def chat(
         self,
@@ -81,6 +104,8 @@ class LLMClient:
             return await self._chat_openai(messages, tools, tool_choice, system_prompt, max_tokens)
         elif self.provider == LLMProvider.GEMINI:
             return await self._chat_gemini(messages, tools, tool_choice, system_prompt, max_tokens)
+        elif self.provider == LLMProvider.CUSTOM:
+            return await self._chat_custom(messages, tools, tool_choice, system_prompt, max_tokens)
 
     async def chat_stream(
         self,
@@ -104,6 +129,9 @@ class LLMClient:
                 yield chunk
         elif self.provider == LLMProvider.GEMINI:
             async for chunk in self._chat_stream_gemini(messages, tools, tool_choice, system_prompt, max_tokens):
+                yield chunk
+        elif self.provider == LLMProvider.CUSTOM:
+            async for chunk in self._chat_stream_custom(messages, tools, tool_choice, system_prompt, max_tokens):
                 yield chunk
 
     async def _chat_stream_anthropic(self, messages, tools, tool_choice, system_prompt, max_tokens):
@@ -509,6 +537,109 @@ class LLMClient:
             logger.error(f"Error parsing Gemini response: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return result
+
+    # Custom LLM 메서드 (OpenAI 호환 API, httpx 사용)
+    async def _chat_custom(
+        self,
+        messages: list[dict],
+        tools: Optional[list[dict]],
+        tool_choice: Optional[dict],
+        system_prompt: Optional[str],
+        max_tokens: int,
+    ) -> dict:
+        """Custom LLM API 호출 (OpenAI 호환)"""
+        for attempt in range(self.max_retries):
+            try:
+                # OpenAI 형식으로 메시지 변환
+                openai_messages = self._convert_messages_openai(messages, system_prompt)
+
+                payload = {
+                    "model": self.model,
+                    "messages": openai_messages,
+                    "max_tokens": max_tokens,
+                }
+
+                if tools:
+                    payload["tools"] = self._convert_tools_openai(tools)
+
+                if tool_choice:
+                    payload["tool_choice"] = "auto"
+
+                response = await self.client.post("/chat/completions", json=payload)
+                response.raise_for_status()
+                data = response.json()
+
+                return self._parse_response_custom(data)
+
+            except Exception as e:
+                logger.error(f"Custom LLM API error, attempt {attempt + 1}/{self.max_retries}: {type(e).__name__}: {e}")
+                if attempt == self.max_retries - 1:
+                    raise
+                import asyncio
+                await asyncio.sleep(2 ** attempt)
+
+    async def _chat_stream_custom(self, messages, tools, tool_choice, system_prompt, max_tokens):
+        """Custom LLM 스트리밍 API 호출 (OpenAI 호환)"""
+        openai_messages = self._convert_messages_openai(messages, system_prompt)
+
+        payload = {
+            "model": self.model,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        if tools:
+            payload["tools"] = self._convert_tools_openai(tools)
+
+        async with self.client.stream("POST", "/chat/completions", json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        if chunk.get("choices") and chunk["choices"][0].get("delta", {}).get("content"):
+                            yield chunk["choices"][0]["delta"]["content"]
+                    except json.JSONDecodeError:
+                        continue
+
+    def _parse_response_custom(self, data: dict) -> dict:
+        """Custom LLM 응답 파싱 (OpenAI 형식)"""
+        result = {
+            "content": "",
+            "tool_calls": [],
+            "stop_reason": "end_turn",
+        }
+
+        if data.get("choices"):
+            choice = data["choices"][0]
+            message = choice.get("message", {})
+
+            result["content"] = message.get("content", "") or ""
+            result["stop_reason"] = choice.get("finish_reason", "end_turn")
+
+            if message.get("tool_calls"):
+                for tc in message["tool_calls"]:
+                    args = tc.get("function", {}).get("arguments", "{}")
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except json.JSONDecodeError:
+                            args = {}
+
+                    result["tool_calls"].append({
+                        "id": tc.get("id", f"call_{hash(tc.get('function', {}).get('name', ''))}"),
+                        "name": tc.get("function", {}).get("name", ""),
+                        "arguments": args,
+                    })
+
+                if result["tool_calls"]:
+                    result["stop_reason"] = "tool_use"
 
         return result
 
