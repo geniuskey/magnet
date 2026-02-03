@@ -97,16 +97,34 @@ export default function FloatingChat() {
   }), [reservation.buildings, reservation.employees, reservation.allRooms]);
 
   // Function Calling 컨텍스트 (현재 선택 상태 포함)
-  const functionContext = useMemo(() => ({
-    buildings: reservation.buildings,
-    employees: reservation.employees,
-    allRooms: reservation.allRooms,
-    myGroups: reservation.myGroups,
-    // 현재 선택 상태
-    selectedRoom: reservation.selectedRoom,
-    selectedDate: reservation.selectedDate,
-    meetingDuration: reservation.meetingDuration,
-  }), [reservation.buildings, reservation.employees, reservation.allRooms, reservation.myGroups, reservation.selectedRoom, reservation.selectedDate, reservation.meetingDuration]);
+  const functionContext = useMemo(() => {
+    // UI에서 선택한 시간 슬롯 계산
+    let selectedTimeRange = null;
+    if (reservation.selectedTimeSlots?.length > 0) {
+      const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
+      selectedTimeRange = {
+        startTime: slots[0],
+        endTime: slots[slots.length - 1].replace(/:(\d{2})$/, (_, m) => `:${(parseInt(m) + 10).toString().padStart(2, '0')}`),
+      };
+      // 시간 보정 (예: 09:50 + 10분 = 10:00)
+      const [h, m] = selectedTimeRange.endTime.split(':').map(Number);
+      if (m >= 60) {
+        selectedTimeRange.endTime = `${(h + 1).toString().padStart(2, '0')}:${(m - 60).toString().padStart(2, '0')}`;
+      }
+    }
+
+    return {
+      buildings: reservation.buildings,
+      employees: reservation.employees,
+      allRooms: reservation.allRooms,
+      myGroups: reservation.myGroups,
+      // 현재 선택 상태
+      selectedRoom: reservation.selectedRoom,
+      selectedDate: reservation.selectedDate,
+      meetingDuration: reservation.meetingDuration,
+      selectedTimeRange, // UI에서 선택한 시간
+    };
+  }, [reservation.buildings, reservation.employees, reservation.allRooms, reservation.myGroups, reservation.selectedRoom, reservation.selectedDate, reservation.meetingDuration, reservation.selectedTimeSlots]);
 
   // 액션 적용 핸들러 (토글 방식)
   const handleApplyAction = useCallback((action, msgIdx) => {

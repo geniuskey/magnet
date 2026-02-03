@@ -197,8 +197,8 @@ export function parseUserIntent(message, context = {}) {
   const lowerMsg = message.toLowerCase();
   const functionCalls = [];
 
-  // 시간 추출 (먼저 수행)
-  const times = extractTimeRange(message, context.meetingDuration);
+  // 시간 추출 (메시지에서 추출, 없으면 UI 선택 시간 사용)
+  const times = extractTimeRange(message, context.meetingDuration) || context.selectedTimeRange;
 
   // 회의실 추출
   const room = extractRoom(message, context.allRooms || []);
@@ -207,8 +207,12 @@ export function parseUserIntent(message, context = {}) {
   const reservationPattern = /(.+?)[과와,]\s*(.+?)[과와]?\s*(내일|오늘|모레|\d{4}-\d{2}-\d{2}|다음\s*주)?\s*(오전|오후)?\s*(\d{1,2})시?\s*[~\-부터에]?\s*(오전|오후)?\s*(\d{1,2})시?.*?(회의실|대회의실|소회의실|세미나실|룸)/;
   const quickReservationMatch = message.match(reservationPattern);
 
-  // "예약" 키워드가 있거나, 시간이 있으면 예약 시도 (회의실 미지정 시 자동 선택)
-  const hasReservationIntent = lowerMsg.includes('예약') || (
+  // 예약 의도 키워드 확장: 예약, 잡아, 만들어, 생성
+  const reservationKeywords = ['예약', '잡아', '만들어', '생성', '부킹', 'booking'];
+  const hasReservationKeyword = reservationKeywords.some(kw => lowerMsg.includes(kw));
+
+  // 예약 의도: 키워드가 있거나, (회의실+시간) 조합이 있으면
+  const hasReservationIntent = hasReservationKeyword || (
     (room || context.selectedRoom) && times
   );
 
