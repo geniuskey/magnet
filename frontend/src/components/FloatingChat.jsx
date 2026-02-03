@@ -22,22 +22,6 @@ const extractActions = (text, { buildings, employees, allRooms }) => {
     }
   };
 
-  // 건물 매칭
-  buildings.forEach(building => {
-    if (text.includes(building.name)) {
-      addAction('building', `건물: ${building.name}`, building);
-    }
-  });
-
-  // 층 매칭
-  const floorMatch = text.match(/(\d+)층/g);
-  if (floorMatch) {
-    const uniqueFloors = [...new Set(floorMatch)];
-    uniqueFloors.forEach(f => {
-      addAction('floor', `층: ${f}`, f);
-    });
-  }
-
   // 회의실 매칭
   allRooms.forEach(room => {
     if (text.includes(room.name)) {
