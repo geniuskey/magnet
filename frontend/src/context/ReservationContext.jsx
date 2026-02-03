@@ -1726,6 +1726,7 @@ export function ReservationProvider({ children }) {
     // 분석/추천
     findOptimalTimes,
     getParticipantSchedules,
+    getRecurringDates,
 
     // LLM 제어용
     setParticipantsByNames,

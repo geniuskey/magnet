@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useReservation } from '../context/ReservationContext';
 
 export default function ReservationModal({ onClose }) {
@@ -24,6 +24,8 @@ export default function ReservationModal({ onClose }) {
     createReservation,
     clearSelection,
     clearAttendees,
+    reservations,
+    getRecurringDates,
   } = useReservation();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +68,48 @@ export default function ReservationModal({ onClose }) {
     [recurrenceTypes.BIWEEKLY]: '격주',
     [recurrenceTypes.MONTHLY]: '매월',
   };
+
+  // 빠른 종료 날짜 설정
+  const setQuickEndDate = (months) => {
+    const date = new Date(selectedDate);
+    date.setMonth(date.getMonth() + months);
+    setRecurrenceEndDate(date.toISOString().split('T')[0]);
+  };
+
+  // 반복 예약될 날짜 목록
+  const recurringDates = useMemo(() => {
+    if (recurrence === recurrenceTypes.NONE || !recurrenceEndDate) return [];
+    return getRecurringDates(selectedDate, recurrenceEndDate, recurrence);
+  }, [selectedDate, recurrenceEndDate, recurrence, recurrenceTypes.NONE, getRecurringDates]);
+
+  // 충돌 감지 (기존 예약과 겹치는 날짜)
+  const conflicts = useMemo(() => {
+    if (recurringDates.length === 0 || !selectedRoom) return [];
+
+    const roomReservations = reservations[selectedRoom] || {};
+    const conflictDates = [];
+
+    // 선택된 시간 슬롯들
+    const selectedSlots = selectedTimeSlots
+      .filter(s => s.roomId === selectedRoom)
+      .map(s => s.timeSlot);
+
+    recurringDates.forEach(date => {
+      // 해당 날짜에 선택된 시간대에 기존 예약이 있는지 확인
+      // (reservations 구조가 roomId -> timeSlot -> reservation 이므로
+      //  날짜별로 확인하려면 각 예약의 date를 확인해야 함)
+      selectedSlots.forEach(slot => {
+        const existing = roomReservations[slot];
+        if (existing && existing.date === date && !existing.isMyReservation) {
+          if (!conflictDates.includes(date)) {
+            conflictDates.push(date);
+          }
+        }
+      });
+    });
+
+    return conflictDates;
+  }, [recurringDates, selectedRoom, reservations, selectedTimeSlots]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -195,6 +239,30 @@ export default function ReservationModal({ onClose }) {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   반복 종료 날짜 <span className="text-red-500">*</span>
                 </label>
+                {/* 빠른 선택 버튼 */}
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickEndDate(1)}
+                    className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    1개월
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickEndDate(3)}
+                    className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    3개월
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuickEndDate(6)}
+                    className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    6개월
+                  </button>
+                </div>
                 <input
                   type="date"
                   value={recurrenceEndDate}
@@ -207,7 +275,23 @@ export default function ReservationModal({ onClose }) {
                   {recurrence === recurrenceTypes.WEEKLY && '매주 같은 요일에 반복됩니다.'}
                   {recurrence === recurrenceTypes.BIWEEKLY && '격주 같은 요일에 반복됩니다.'}
                   {recurrence === recurrenceTypes.MONTHLY && '매월 같은 날짜에 반복됩니다.'}
+                  {recurringDates.length > 0 && ` (총 ${recurringDates.length}회)`}
                 </p>
+
+                {/* 충돌 경고 */}
+                {conflicts.length > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300 font-medium flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      {conflicts.length}개 날짜에 기존 예약이 있습니다
+                    </p>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                      {conflicts.slice(0, 3).join(', ')}{conflicts.length > 3 && ` 외 ${conflicts.length - 3}건`}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
