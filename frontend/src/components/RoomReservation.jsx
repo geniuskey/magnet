@@ -116,11 +116,11 @@ export default function RoomReservation() {
     return h * 60 + m;
   }
 
-  // 슬롯 너비 계산 (간격에 따라)
+  // 슬롯 너비 계산 (간격에 따라 - 큰 간격일수록 컴팩트하게)
   const slotWidth = useMemo(() => {
-    // 1시간 = 120px 기준
-    // 10분: 20px, 30분: 60px, 60분: 120px
-    return (timeSlotInterval / 10) * 20;
+    // 10분: 20px, 30분: 36px, 60분: 48px
+    const widthMap = { 10: 20, 30: 36, 60: 48 };
+    return widthMap[timeSlotInterval] || 20;
   }, [timeSlotInterval]);
 
   // displaySlot에 해당하는 내부 슬롯들 가져오기
