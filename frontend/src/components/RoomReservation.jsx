@@ -82,8 +82,64 @@ export default function RoomReservation() {
   const [isMinimapDragging, setIsMinimapDragging] = useState(false);
   const [minimapDragStart, setMinimapDragStart] = useState(null); // { mouseX, scrollLeft }
 
+  // 회의실 열 너비 (드래그로 조절 가능, localStorage 저장)
+  const ROOM_COLUMN_WIDTH_KEY = 'room_column_width';
+  const [roomColumnWidth, setRoomColumnWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem(ROOM_COLUMN_WIDTH_KEY);
+      return saved ? parseInt(saved, 10) : 160;
+    } catch {
+      return 160;
+    }
+  });
+  const [isResizingColumn, setIsResizingColumn] = useState(false);
+  const columnResizeStartX = useRef(null);
+  const columnResizeStartWidth = useRef(null);
+
   const scrollContainerRef = useRef(null);
   const minimapRef = useRef(null);
+
+  // 열 너비 저장
+  useEffect(() => {
+    try {
+      localStorage.setItem(ROOM_COLUMN_WIDTH_KEY, roomColumnWidth.toString());
+    } catch {
+      // ignore
+    }
+  }, [roomColumnWidth]);
+
+  // 열 너비 드래그 핸들러
+  const handleColumnResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizingColumn(true);
+    columnResizeStartX.current = e.clientX;
+    columnResizeStartWidth.current = roomColumnWidth;
+  }, [roomColumnWidth]);
+
+  useEffect(() => {
+    if (!isResizingColumn) return;
+
+    const handleMouseMove = (e) => {
+      const delta = e.clientX - columnResizeStartX.current;
+      const newWidth = Math.max(100, Math.min(300, columnResizeStartWidth.current + delta));
+      setRoomColumnWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingColumn(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingColumn]);
 
   // 선택된 참석자들의 바쁜 시간대 계산
   const participantBusySlots = useMemo(() => {
@@ -1256,8 +1312,18 @@ export default function RoomReservation() {
               <div className="inline-block min-w-full">
                 {/* 시간 헤더 */}
                 <div className="flex sticky top-0 z-20 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                  <div className="w-32 flex-shrink-0 px-3 py-3 font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 sticky left-0 z-30">
+                  <div
+                    className="flex-shrink-0 px-3 py-3 font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 sticky left-0 z-30 relative"
+                    style={{ width: roomColumnWidth }}
+                  >
                     회의실
+                    {/* 열 너비 조절 핸들 */}
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 transition-colors group/resize"
+                      onMouseDown={handleColumnResizeStart}
+                    >
+                      <div className="absolute inset-y-0 -right-1 w-3" />
+                    </div>
                   </div>
                   <div className="flex">
                     {hourSlots.map(hour => (
@@ -1293,7 +1359,7 @@ export default function RoomReservation() {
                       {/* 층 구분 헤더 (멀티플로어일 때만 표시) */}
                       {selectedFloors.size > 1 && (
                         <div className="flex bg-blue-50 dark:bg-blue-900/30 border-b-2 border-blue-200 dark:border-blue-700">
-                          <div className="w-32 flex-shrink-0 px-3 py-2 border-r border-blue-200 dark:border-blue-700 sticky left-0 z-10 bg-blue-50 dark:bg-blue-900/30">
+                          <div className="flex-shrink-0 px-3 py-2 border-r border-blue-200 dark:border-blue-700 sticky left-0 z-10 bg-blue-50 dark:bg-blue-900/30" style={{ width: roomColumnWidth }}>
                             <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">{floor?.name}</span>
                           </div>
                           <div className="flex-1" />
@@ -1311,7 +1377,7 @@ export default function RoomReservation() {
                               key={room.id}
                               className="flex border-b border-gray-100 dark:border-gray-700 last:border-b-0 bg-gray-50 dark:bg-gray-900/50 opacity-50 hover:opacity-100 transition-opacity group"
                             >
-                              <div className="w-32 flex-shrink-0 px-3 py-1 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 sticky left-0 z-10">
+                              <div className="flex-shrink-0 px-3 py-1 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 sticky left-0 z-10" style={{ width: roomColumnWidth }}>
                                 <div className="flex items-center gap-1">
                                   <button
                                     type="button"
@@ -1333,7 +1399,7 @@ export default function RoomReservation() {
 
                         return (
                           <div key={room.id} className="flex border-b border-gray-100 dark:border-gray-700 last:border-b-0 group/room">
-                            <div className="w-32 flex-shrink-0 px-3 py-2 border-r border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 sticky left-0 z-10">
+                            <div className="flex-shrink-0 px-3 py-2 border-r border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 sticky left-0 z-10" style={{ width: roomColumnWidth }}>
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
@@ -1350,20 +1416,21 @@ export default function RoomReservation() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                   </svg>
                                 </button>
+                                <div className="font-medium text-gray-900 dark:text-white text-sm truncate flex-1">{room.name}</div>
+                              </div>
+                              <div className="flex items-center gap-1 ml-5">
                                 <button
                                   type="button"
                                   onClick={() => toggleHiddenRoom(room.id)}
                                   className="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors opacity-0 group-hover/room:opacity-100"
                                   title="이 회의실 숨기기"
                                 >
-                                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                                   </svg>
                                 </button>
-                                <div className="font-medium text-gray-900 dark:text-white text-sm truncate">{room.name}</div>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">{room.capacity}인</span>
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400 ml-5">{room.capacity}인</div>
                             </div>
                     <div className="flex">
                       {displayTimeSlots.map((slot, displaySlotIndex) => {
