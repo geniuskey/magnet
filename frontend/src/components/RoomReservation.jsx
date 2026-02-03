@@ -116,6 +116,13 @@ export default function RoomReservation() {
     return h * 60 + m;
   }
 
+  // 슬롯 너비 계산 (간격에 따라)
+  const slotWidth = useMemo(() => {
+    // 1시간 = 120px 기준
+    // 10분: 20px, 30분: 60px, 60분: 120px
+    return (timeSlotInterval / 10) * 20;
+  }, [timeSlotInterval]);
+
   // displaySlot에 해당하는 내부 슬롯들 가져오기
   const getInternalSlotsForDisplay = useCallback((displaySlot) => {
     const displayIdx = displayTimeSlots.indexOf(displaySlot);
@@ -910,13 +917,6 @@ export default function RoomReservation() {
 
   // 슬롯이 시간의 시작인지 확인 (간격에 따라)
   const isHourStart = (slot) => slot.endsWith(':00');
-
-  // 슬롯 너비 계산 (간격에 따라)
-  const slotWidth = useMemo(() => {
-    // 1시간 = 120px 기준
-    // 10분: 20px, 30분: 60px, 60분: 120px
-    return (timeSlotInterval / 10) * 20;
-  }, [timeSlotInterval]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors">
