@@ -972,19 +972,6 @@ export default function RoomReservation() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">간격:</label>
-            <select
-              value={timeSlotInterval}
-              onChange={(e) => setTimeSlotInterval(Number(e.target.value))}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value={10}>10분</option>
-              <option value={30}>30분</option>
-              <option value={60}>1시간</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">건물:</label>
             <select
               value={selectedBuilding?.id || ''}
@@ -1059,16 +1046,18 @@ export default function RoomReservation() {
         {/* 회의실 필터 영역 */}
         {selectedFloors.size > 0 && (
           <div className="flex items-center gap-4 mt-3">
-            {/* 이름 검색 */}
+            {/* 시간 간격 */}
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">검색:</label>
-              <input
-                type="text"
-                value={roomFilters.nameSearch}
-                onChange={(e) => setRoomFilters({ ...roomFilters, nameSearch: e.target.value })}
-                placeholder="회의실 이름"
-                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white w-32"
-              />
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">간격:</label>
+              <select
+                value={timeSlotInterval}
+                onChange={(e) => setTimeSlotInterval(Number(e.target.value))}
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value={10}>10분</option>
+                <option value={30}>30분</option>
+                <option value={60}>1시간</option>
+              </select>
             </div>
 
             {/* 인원 필터 */}
@@ -1115,9 +1104,9 @@ export default function RoomReservation() {
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {filteredRooms.length}/{rooms.length}개 회의실
               </span>
-              {(roomFilters.nameSearch || roomFilters.minCapacity || roomFilters.amenities.length > 0) && (
+              {(roomFilters.minCapacity || roomFilters.amenities.length > 0) && (
                 <button
-                  onClick={() => setRoomFilters({ nameSearch: '', minCapacity: null, amenities: [] })}
+                  onClick={() => setRoomFilters({ ...roomFilters, minCapacity: null, amenities: [] })}
                   className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                 >
                   초기화
@@ -1211,7 +1200,7 @@ export default function RoomReservation() {
               </p>
               {rooms.length > 0 && (
                 <button
-                  onClick={() => setRoomFilters({ nameSearch: '', minCapacity: null, amenities: [] })}
+                  onClick={() => setRoomFilters({ ...roomFilters, minCapacity: null, amenities: [] })}
                   className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                 >
                   필터 초기화
