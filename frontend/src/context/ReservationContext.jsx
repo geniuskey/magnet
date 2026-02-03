@@ -428,11 +428,14 @@ export function ReservationProvider({ children }) {
     if (roomFilters.amenities.length > 0) {
       result = result.filter(r => roomFilters.amenities.every(a => r.amenities?.includes(a)));
     }
-    // 즐겨찾기 먼저 정렬
-    result = result.sort((a, b) => {
+    // 즐겨찾기 먼저 정렬 (원본 순서 유지)
+    const originalOrder = new Map(rooms.map((r, i) => [r.id, i]));
+    result = [...result].sort((a, b) => {
       const aFav = favoriteRooms.has(a.id) ? 0 : 1;
       const bFav = favoriteRooms.has(b.id) ? 0 : 1;
-      return aFav - bFav;
+      if (aFav !== bFav) return aFav - bFav;
+      // 같은 그룹 내에서는 원본 순서 유지
+      return (originalOrder.get(a.id) ?? 0) - (originalOrder.get(b.id) ?? 0);
     });
     return result;
   }, [rooms, roomFilters, favoriteRooms]);
