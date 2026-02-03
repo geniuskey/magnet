@@ -420,16 +420,25 @@ export default function FloatingChat() {
   };
 
   const toggleOpen = () => {
-    if (isMinimized) {
+    if (isOpen) {
+      // 닫을 때 - isMinimized도 리셋
+      setIsOpen(false);
       setIsMinimized(false);
     } else {
-      setIsOpen(!isOpen);
+      // 열 때
+      setIsOpen(true);
+      setIsMinimized(false);
     }
   };
 
   const toggleMinimize = (e) => {
     e.stopPropagation();
     setIsMinimized(!isMinimized);
+  };
+
+  const closeChat = () => {
+    setIsOpen(false);
+    setIsMinimized(false);
   };
 
   // 위치 초기화 (기본 위치로)
@@ -568,7 +577,7 @@ export default function FloatingChat() {
             </svg>
           </button>
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={closeChat}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
             title="닫기"
           >
