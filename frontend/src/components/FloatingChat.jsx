@@ -76,7 +76,6 @@ const savePosition = (position) => {
 
 export default function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [position, setPosition] = useState(() => loadPosition() || DEFAULT_POSITION);
   const [isDragging, setIsDragging] = useState(false);
@@ -239,10 +238,10 @@ export default function FloatingChat() {
   }, [allMessages]);
 
   useEffect(() => {
-    if (isOpen && !isMinimized && inputRef.current) {
+    if (isOpen && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isOpen, isMinimized]);
+  }, [isOpen]);
 
   // 드래그 시작
   const handleMouseDown = useCallback((e) => {
@@ -261,9 +260,9 @@ export default function FloatingChat() {
   const handleMouseMove = useCallback((e) => {
     if (!isDragging) return;
 
-    // 열린 상태: 384x512, 닫힌/최소화 상태: 56x56 (버튼)
-    const elementWidth = isOpen && !isMinimized ? 384 : 56;
-    const elementHeight = isOpen && !isMinimized ? 512 : 56;
+    // 열린 상태: 384x512, 닫힌 상태: 56x56 (버튼)
+    const elementWidth = isOpen ? 384 : 56;
+    const elementHeight = isOpen ? 512 : 56;
 
     // 오른쪽 하단 기준으로 위치 계산
     let newRight = window.innerWidth - e.clientX - dragOffset.x;
@@ -274,7 +273,7 @@ export default function FloatingChat() {
     newBottom = Math.max(0, Math.min(newBottom, window.innerHeight - elementHeight));
 
     setPosition({ right: newRight, bottom: newBottom });
-  }, [isDragging, dragOffset, isOpen, isMinimized]);
+  }, [isDragging, dragOffset, isOpen]);
 
   // 위치가 기본 위치와 다른지 확인
   const isCustomPosition = position.right !== DEFAULT_POSITION.right || position.bottom !== DEFAULT_POSITION.bottom;
@@ -420,25 +419,11 @@ export default function FloatingChat() {
   };
 
   const toggleOpen = () => {
-    if (isOpen) {
-      // 닫을 때 - isMinimized도 리셋
-      setIsOpen(false);
-      setIsMinimized(false);
-    } else {
-      // 열 때
-      setIsOpen(true);
-      setIsMinimized(false);
-    }
-  };
-
-  const toggleMinimize = (e) => {
-    e.stopPropagation();
-    setIsMinimized(!isMinimized);
+    setIsOpen(!isOpen);
   };
 
   const closeChat = () => {
     setIsOpen(false);
-    setIsMinimized(false);
   };
 
   // 위치 초기화 (기본 위치로)
@@ -497,29 +482,6 @@ export default function FloatingChat() {
     );
   }
 
-  // 최소화된 상태
-  if (isMinimized) {
-    return (
-      <div
-        className={`fixed bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-3 flex items-center gap-3 hover:shadow-xl transition-all z-50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-        style={getPositionStyle()}
-        onMouseDown={handleButtonMouseDown}
-        onClick={(e) => {
-          if (!isDragging) toggleMinimize(e);
-        }}
-      >
-        <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
-          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        </div>
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">AI 어시스턴트</span>
-        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-        </svg>
-      </div>
-    );
-  }
 
   // 열린 상태 - 채팅창
   return (
@@ -568,21 +530,12 @@ export default function FloatingChat() {
             </svg>
           </button>
           <button
-            onClick={toggleMinimize}
+            onClick={closeChat}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-            title="최소화"
+            title="접기"
           >
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={closeChat}
-            className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
-            title="닫기"
-          >
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
