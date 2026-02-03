@@ -198,7 +198,9 @@ export function parseUserIntent(message, context = {}) {
   const functionCalls = [];
 
   // 시간 추출 (메시지에서 추출, 없으면 UI 선택 시간 사용)
-  const times = extractTimeRange(message, context.meetingDuration) || context.selectedTimeRange;
+  const extractedTimes = extractTimeRange(message, context.meetingDuration);
+  const times = extractedTimes || context.selectedTimeRange;
+  console.log('%c[parseUserIntent] Times:', 'color: #4CAF50;', { extractedTimes, contextTime: context.selectedTimeRange, final: times });
 
   // 회의실 추출
   const room = extractRoom(message, context.allRooms || []);
@@ -228,17 +230,19 @@ export function parseUserIntent(message, context = {}) {
       (context.allRooms || []).find(r => r.id === context.selectedRoom)?.name : null);
 
     if (times) {
+      const args = {
+        title: '회의',
+        organizerName: names[0] || null,
+        requiredNames: names.slice(1),
+        ...(roomName && { roomName }), // 회의실이 있으면 포함, 없으면 자동 선택
+        date: date,
+        startTime: times.startTime,
+        endTime: times.endTime,
+      };
+      console.log('%c[parseUserIntent] Creating reservation with:', 'color: #2196F3;', args);
       functionCalls.push({
         name: 'createQuickReservation',
-        arguments: {
-          title: '회의',
-          organizerName: names[0] || null,
-          requiredNames: names.slice(1),
-          ...(roomName && { roomName }), // 회의실이 있으면 포함, 없으면 자동 선택
-          date: date,
-          startTime: times.startTime,
-          endTime: times.endTime,
-        },
+        arguments: args,
       });
       return functionCalls;
     }
@@ -538,7 +542,9 @@ export async function executeFunctions(functionCalls, reservation) {
           break;
 
         case 'createQuickReservation':
+          console.log('%c[createQuickReservation] Args:', 'color: #9C27B0;', args);
           result = await reservation.createQuickReservation(args);
+          console.log('%c[createQuickReservation] Result:', 'color: #9C27B0;', result);
           results.push({
             function: call.name,
             success: result.success,

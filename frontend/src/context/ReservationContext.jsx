@@ -1527,7 +1527,9 @@ export function ReservationProvider({ children }) {
   // 최적 회의실 자동 선택 (AI 예약용)
   // 우선순위: 1. 같은 층 2. 즐겨찾기 3. 인원 수에 맞는 회의실 (정원-참여인원 최소)
   const findBestRoom = useCallback((participantCount, startTime, endTime, date = selectedDate) => {
+    console.log('%c[findBestRoom] Input:', 'color: #FF9800;', { participantCount, startTime, endTime, date });
     const availableRooms = getAvailableRooms(startTime, endTime, date);
+    console.log('%c[findBestRoom] Available rooms:', 'color: #FF9800;', availableRooms);
     if (availableRooms.length === 0) return null;
 
     // 현재 선택된 층 목록
@@ -1625,6 +1627,7 @@ export function ReservationProvider({ children }) {
 
     // 3. 회의실 설정 (없으면 자동 선택)
     let targetRoom = null;
+    console.log('%c[createQuickReservation] roomName:', 'color: #E91E63;', roomName, 'startTime:', startTime, 'endTime:', endTime);
     if (roomName) {
       targetRoom = setRoomByName(roomName);
       if (!targetRoom) return { success: false, error: `회의실 "${roomName}" 찾을 수 없음` };
@@ -1632,7 +1635,9 @@ export function ReservationProvider({ children }) {
       // 회의실 미지정 시 자동 선택
       // 참여 인원 계산 (주관자 + 필수 참석자 + 선택 참석자)
       const participantCount = 1 + requiredNames.length + optionalNames.length;
+      console.log('%c[createQuickReservation] Auto-select room for', 'color: #E91E63;', participantCount, 'participants');
       const bestRoom = findBestRoom(participantCount, startTime, endTime);
+      console.log('%c[createQuickReservation] Best room:', 'color: #E91E63;', bestRoom);
       if (bestRoom) {
         targetRoom = setRoomByName(bestRoom.name);
       }
