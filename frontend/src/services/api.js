@@ -140,3 +140,29 @@ export async function checkHealth() {
 
   return response.json()
 }
+
+/**
+ * LLM을 사용하여 의도 파싱 (규칙 기반 실패 시 폴백)
+ * @param {string} message - 사용자 메시지
+ * @param {Object} context - 현재 UI 상태
+ * @returns {Promise<Object>} 함수 호출 목록
+ */
+export async function parseIntent(message, context = {}) {
+  const response = await fetch(`${API_BASE_URL}/chat/parse-intent`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message,
+      context,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.detail || `HTTP error ${response.status}`)
+  }
+
+  return response.json()
+}

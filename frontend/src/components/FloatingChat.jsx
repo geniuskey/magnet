@@ -3,6 +3,7 @@ import { useChat } from '../context/ChatContext';
 import { useReservation } from '../context/ReservationContext';
 import TypingIndicator from './TypingIndicator';
 import { parseUserIntent, executeFunctions, formatFunctionResults } from '../services/functionCalling';
+import { parseIntent as parseIntentWithLLM } from '../services/api';
 
 const STORAGE_KEY = 'floating_chat_position';
 
@@ -316,9 +317,9 @@ export default function FloatingChat() {
     // Function Calling 의도 파싱
     const functionCalls = parseUserIntent(message, functionContext);
 
-    if (functionCalls.length > 0) {
-      // 함수 실행
-      const results = await executeFunctions(functionCalls, reservation);
+    // 함수 실행 헬퍼
+    const executeAndRespond = async (calls) => {
+      const results = await executeFunctions(calls, reservation);
       const responseText = formatFunctionResults(results);
 
       // 추가 데이터 추출 (최적 시간, 회의실 목록 등)
@@ -332,38 +333,73 @@ export default function FloatingChat() {
         optimalTimes,
         availableRooms,
         functionResults: results,
-        autoApplied: true, // 함수가 이미 실행되었음을 표시
+        autoApplied: true,
       };
       setLocalMessages(prev => [...prev, assistantMessage]);
+    };
+
+    if (functionCalls.length > 0) {
+      // 규칙 기반 파싱 성공 - 바로 실행
+      await executeAndRespond(functionCalls);
     } else {
-      // 백엔드 API 호출 (Function Call이 감지되지 않은 경우)
-      // 컨텍스트 정보 구성 (현재 UI 상태)
-      const contextInfo = [];
-      if (reservation.selectedParticipants.length > 0) {
-        contextInfo.push(`참여자: ${reservation.selectedParticipants.map(p => p.name).join(', ')}`);
-      }
-      if (reservation.selectedBuilding) {
-        contextInfo.push(`건물: ${reservation.selectedBuilding.name}`);
-      }
-      if (reservation.selectedFloor) {
-        contextInfo.push(`층: ${reservation.selectedFloor.name}`);
-      }
-      if (reservation.selectedRoom) {
-        const room = reservation.allRooms.find(r => r.id === reservation.selectedRoom);
-        if (room) contextInfo.push(`회의실: ${room.name}`);
-      }
-      if (reservation.selectedTimeSlots.length > 0) {
-        const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
-        contextInfo.push(`선택 시간: ${slots[0]} ~ ${addMinutes(slots[slots.length - 1], 10)}`);
-      }
+      // 규칙 기반 파싱 실패 - LLM 폴백 시도
+      try {
+        // LLM에 전달할 컨텍스트
+        const llmContext = {
+          participants: reservation.selectedParticipants.map(p => p.name),
+          selectedTimeRange: functionContext.selectedTimeRange,
+          selectedRoom: reservation.selectedRoom
+            ? reservation.allRooms.find(r => r.id === reservation.selectedRoom)?.name
+            : null,
+          selectedDate: reservation.selectedDate,
+        };
 
-      const fullMessage = contextInfo.length > 0
-        ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
-        : message;
+        // "처리 중" 메시지 표시
+        const thinkingMsg = {
+          id: `thinking_${Date.now()}`,
+          role: 'assistant',
+          content: '생각 중...',
+          timestamp: new Date().toISOString(),
+          isThinking: true,
+        };
+        setLocalMessages(prev => [...prev, thinkingMsg]);
 
-      // API로 fullMessage 전송하되, UI에는 원본 message만 표시
-      // 로컬에 이미 userMessage가 있으므로 skipUserMessage 사용
-      await sendMessage(fullMessage, { skipUserMessage: true });
+        const llmResult = await parseIntentWithLLM(message, llmContext);
+
+        // "처리 중" 메시지 제거
+        setLocalMessages(prev => prev.filter(m => m.id !== thinkingMsg.id));
+
+        if (llmResult.function_calls && llmResult.function_calls.length > 0) {
+          // LLM이 함수 호출을 추출함 - 실행
+          console.log('[LLM Fallback] Function calls:', llmResult.function_calls);
+          await executeAndRespond(llmResult.function_calls);
+        } else {
+          // LLM도 함수를 찾지 못함 - 일반 대화 응답
+          const assistantMessage = {
+            role: 'assistant',
+            content: llmResult.message || '죄송합니다, 요청을 이해하지 못했습니다. 다시 말씀해 주세요.',
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [...prev, assistantMessage]);
+        }
+      } catch (error) {
+        console.error('[LLM Fallback] Error:', error);
+        // LLM 호출 실패 - 기본 백엔드 스트리밍 사용
+        const contextInfo = [];
+        if (reservation.selectedParticipants.length > 0) {
+          contextInfo.push(`참여자: ${reservation.selectedParticipants.map(p => p.name).join(', ')}`);
+        }
+        if (reservation.selectedTimeSlots.length > 0) {
+          const slots = reservation.selectedTimeSlots.map(s => s.timeSlot).sort();
+          contextInfo.push(`선택 시간: ${slots[0]} ~ ${addMinutes(slots[slots.length - 1], 10)}`);
+        }
+
+        const fullMessage = contextInfo.length > 0
+          ? `[현재 상태: ${contextInfo.join(', ')}]\n\n${message}`
+          : message;
+
+        await sendMessage(fullMessage, { skipUserMessage: true });
+      }
     }
   };
 
